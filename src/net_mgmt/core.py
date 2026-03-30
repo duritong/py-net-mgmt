@@ -381,6 +381,7 @@ class Network:
     def save(self):
         if self.file_path:
             from .loader import save_network_to_file
+
             save_network_to_file(self)
 
     def add_allocation(self, allocation: Allocation):
@@ -550,6 +551,7 @@ class Network:
             self.save()
         return deleted
 
+
 def validate_network_list(networks: List[Network]):
     """Validate that routable networks and networks within the same context do not overlap."""
 
@@ -561,8 +563,7 @@ def validate_network_list(networks: List[Network]):
                 net2 = sorted_networks[j]
                 if net1.cidr.overlaps(net2.cidr):
                     raise ValueError(
-                        f"Network '{net1.name}' ({net1.cidr}) overlaps with "
-                        f"'{net2.name}' ({net2.cidr}) in {group_name}"
+                        f"Network '{net1.name}' ({net1.cidr}) overlaps with '{net2.name}' ({net2.cidr}) in {group_name}"
                     )
 
     # Check for overlapping CIDRs between routable networks (they effectively share a global context)

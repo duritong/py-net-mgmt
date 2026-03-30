@@ -80,9 +80,7 @@ class TestJinjaRendering(unittest.TestCase):
         mock_get_db.return_value = self.networks
 
         # Test implicit usage
-        template = self.env.from_string(
-            "{% for net in 'BD1' | networks_in_bridge_domain %}{{ net.name }},{% endfor %}"
-        )
+        template = self.env.from_string("{% for net in 'BD1' | networks_in_bridge_domain %}{{ net.name }},{% endfor %}")
         self.assertEqual(template.render(), "net1,net2,")
 
         # Test explicit usage
@@ -96,9 +94,7 @@ class TestJinjaRendering(unittest.TestCase):
         mock_get_db.return_value = self.networks
 
         # Test implicit usage
-        template = self.env.from_string(
-            "{% for net in 'EPG1' | networks_in_epg %}{{ net.name }},{% endfor %}"
-        )
+        template = self.env.from_string("{% for net in 'EPG1' | networks_in_epg %}{{ net.name }},{% endfor %}")
         self.assertEqual(template.render(), "net1,net3,")
 
         # Test explicit usage
@@ -110,23 +106,18 @@ class TestJinjaRendering(unittest.TestCase):
     def test_query_allocations_filter(self):
         # Test query by hostname
         template = self.env.from_string(
-            "{% set allocs = net | query_allocations('host1') %}"
-            "{% for a in allocs %}{{ a.hostname }}{% endfor %}"
+            "{% set allocs = net | query_allocations('host1') %}{% for a in allocs %}{{ a.hostname }}{% endfor %}"
         )
         self.assertEqual(template.render(net=self.networks[0]), "host1")
 
         # Test query by partial ip or comment
         template2 = self.env.from_string(
-            "{% set allocs = net | query_allocations('db') %}"
-            "{% for a in allocs %}{{ a.ip }}{% endfor %}"
+            "{% set allocs = net | query_allocations('db') %}{% for a in allocs %}{{ a.ip }}{% endfor %}"
         )
         self.assertEqual(template2.render(net=self.networks[0]), "10.0.1.20")
 
         # Empty result
-        template3 = self.env.from_string(
-            "{% set allocs = net | query_allocations('notfound') %}"
-            "{{ allocs | length }}"
-        )
+        template3 = self.env.from_string("{% set allocs = net | query_allocations('notfound') %}{{ allocs | length }}")
         self.assertEqual(template3.render(net=self.networks[0]), "0")
 
 

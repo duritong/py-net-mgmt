@@ -142,8 +142,8 @@ class TestNetworkValidation(unittest.TestCase):
             cidr="192.168.1.0/24",
             reservations=[
                 Reservation(id="pool1", cidr="192.168.1.100-192.168.1.102", comment="pool", allocatable=True),
-                Reservation(id="pool2", cidr="192.168.1.105-192.168.1.107", comment="pool", allocatable=True)
-            ]
+                Reservation(id="pool2", cidr="192.168.1.105-192.168.1.107", comment="pool", allocatable=True),
+            ],
         )
 
         # We need to allocate 5 IPs. It should pull from both pools.

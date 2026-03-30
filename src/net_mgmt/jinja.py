@@ -59,9 +59,7 @@ def query_allocations(value: Any, prefix: str) -> List[Allocation]:
     return []
 
 
-def find_or_allocate_hostname(
-    value: Any, hostname: str, reservation_id: Optional[str] = None
-) -> Optional[Allocation]:
+def find_or_allocate_hostname(value: Any, hostname: str, reservation_id: Optional[str] = None) -> Optional[Allocation]:
     """Find or allocate a single IP by hostname in a network."""
     if isinstance(value, Network):
         alloc = value.find_or_allocate_hostname(hostname, reservation_id)

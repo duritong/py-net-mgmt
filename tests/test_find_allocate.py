@@ -84,5 +84,6 @@ class TestFindOrAllocate(unittest.TestCase):
         count = self.network.delete_allocations(hostname="notfound")
         self.assertEqual(count, 0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
