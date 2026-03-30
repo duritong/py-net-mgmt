@@ -1,6 +1,6 @@
+import fcntl
 import ipaddress
 import os
-import fcntl
 from typing import List
 
 import yaml
@@ -87,7 +87,7 @@ def save_network_to_file(network: Network):
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             lock_file.seek(0)
-            
+
             # Read all full-line comments to preserve them at the top
             comments = []
             for line in lock_file:
@@ -100,7 +100,7 @@ def save_network_to_file(network: Network):
                 "reserve_gateway": network.reserve_gateway,
                 "reserve_internal": network.reserve_internal,
             }
-            
+
             if network.context != "default":
                 data["context"] = network.context
 
@@ -160,13 +160,13 @@ def save_network_to_file(network: Network):
             # Now write the data back, truncating the file
             lock_file.seek(0)
             lock_file.truncate()
-            
+
             # Write comments first
             for comment in comments:
                 lock_file.write(comment)
-                
+
             # Dump YAML
             yaml.dump(data, lock_file, sort_keys=False)
-            
+
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

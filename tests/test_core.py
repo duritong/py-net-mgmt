@@ -145,20 +145,20 @@ class TestNetworkValidation(unittest.TestCase):
                 Reservation(id="pool2", cidr="192.168.1.105-192.168.1.107", comment="pool", allocatable=True)
             ]
         )
-        
+
         # We need to allocate 5 IPs. It should pull from both pools.
         net.find_or_allocate_range(comment="fragmented-alloc", count=5)
-        
+
         # Now we should have 5 IPs allocated across the two disjoint pools.
         # Check that we have exactly 5 IPs allocated for this comment
         allocs = [a for a in net.allocations if a.comment == "fragmented-alloc"]
-        
+
         # IPs should be 100, 101, 102, 105, 106
         allocated_ips = []
         for a in allocs:
             for n in a.networks:
                 allocated_ips.extend([str(ip) for ip in n])
-                
+
         self.assertEqual(len(allocated_ips), 5)
         self.assertIn("192.168.1.100", allocated_ips)
         self.assertIn("192.168.1.106", allocated_ips)

@@ -552,7 +552,7 @@ class Network:
 
 def validate_network_list(networks: List[Network]):
     """Validate that routable networks and networks within the same context do not overlap."""
-    
+
     def check_overlaps(nets: List[Network], group_name: str):
         sorted_networks = sorted(nets, key=lambda x: x.cidr)
         for i in range(len(sorted_networks)):
@@ -560,7 +560,10 @@ def validate_network_list(networks: List[Network]):
                 net1 = sorted_networks[i]
                 net2 = sorted_networks[j]
                 if net1.cidr.overlaps(net2.cidr):
-                    raise ValueError(f"Network '{net1.name}' ({net1.cidr}) overlaps with '{net2.name}' ({net2.cidr}) in {group_name}")
+                    raise ValueError(
+                        f"Network '{net1.name}' ({net1.cidr}) overlaps with "
+                        f"'{net2.name}' ({net2.cidr}) in {group_name}"
+                    )
 
     # Check for overlapping CIDRs between routable networks (they effectively share a global context)
     routable_networks = [n for n in networks if n.routable]
