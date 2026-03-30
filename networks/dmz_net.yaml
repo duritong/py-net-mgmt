@@ -1,0 +1,21 @@
+cidr: 10.0.1.0/24
+vlan: 20
+bridge_domain: BD_DMZ
+epg: EPG_FrontEnd
+datacenter: DC_Frankfurt
+zone: Untrusted
+routable: true
+description: Public Facing DMZ
+# Default system reservations will be active:
+# - sys-gateway: 10.0.1.1
+# - sys-internal: 10.0.1.2-10.0.1.5
+reservations:
+  - id: server-pool
+    cidr: 10.0.1.10-10.0.1.50
+    comment: Web Server Pool
+    allocatable: true
+allocations:
+  - ip: 10.0.1.10
+    hostname: web-dmz-01
+  - ip: 10.0.1.11
+    hostname: web-dmz-02

@@ -1,0 +1,28 @@
+cidr: 10.0.0.0/24
+vlan: 10
+bridge_domain: BD_Prod
+epg: EPG_Web
+datacenter: DC_Frankfurt
+zone: Trusted
+routable: true
+description: Production Web Tier
+reserve_gateway: false
+reserve_internal: false
+reservations:
+  - id: gw
+    cidr: 10.0.0.1/32
+    comment: Gateway
+    allocatable: false
+  - id: vip-lb
+    cidr: 10.0.0.10/32
+    comment: Load Balancer VIP
+    allocatable: false
+  - id: pool-01
+    cidr: 10.0.0.20-10.0.0.30
+    comment: Reserved Pool
+    allocatable: true
+allocations:
+  - ip: 10.0.0.20
+    hostname: host-01
+  - cidr: 10.0.0.25-10.0.0.26
+    comment: Management Cluster

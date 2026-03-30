@@ -1,0 +1,5 @@
+cidr: 10.0.0.128/25
+vlan: 20
+description: Overlapping Network but not routable
+datacenter: DC_Frankfurt
+routable: false
