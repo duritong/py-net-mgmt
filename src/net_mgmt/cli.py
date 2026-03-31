@@ -39,14 +39,17 @@ def list(path):
         click.echo("No networks found.")
         return
 
-    click.echo(f"{'Name':<20} {'CIDR':<20} {'Context':<15} {'Datacenter':<15} {'Zone':<15} {'Description':<40}")
-    click.echo("-" * 125)
+    click.echo(
+        f"{'Name':<20} {'CIDR':<20} {'Context':<15} {'Datacenter':<15} {'Zone':<15} {'MTU':<8} {'Description':<40}"
+    )
+    click.echo("-" * 134)
     for net in networks:
         desc = net.description or ""
         dc = net.datacenter or ""
         zone = net.zone or ""
         context = net.context or "default"
-        click.echo(f"{net.name:<20} {str(net.cidr):<20} {context:<15} {dc:<15} {zone:<15} {desc:<40}")
+        mtu = str(net.default_mtu) if net.default_mtu is not None else ""
+        click.echo(f"{net.name:<20} {str(net.cidr):<20} {context:<15} {dc:<15} {zone:<15} {mtu:<8} {desc:<40}")
 
 
 @cli.command()
@@ -74,6 +77,17 @@ def show(name, path):
     click.echo(f"VLAN: {network.vlan}")
     click.echo(f"Bridge Domain: {network.bridge_domain}")
     click.echo(f"EPG: {network.epg}")
+    click.echo(f"Default MTU: {network.default_mtu}")
+    click.echo(f"DNS Nameservers: {', '.join(network.dns_nameservers) if network.dns_nameservers else 'None'}")
+    click.echo(f"DNS Search: {', '.join(network.dns_search) if network.dns_search else 'None'}")
+    click.echo(f"Timeservers: {', '.join(network.timeservers) if network.timeservers else 'None'}")
+
+    if network.static_routes:
+        routes_str = ", ".join([f"{sr.cidr} via {sr.gateway}" for sr in network.static_routes])
+    else:
+        routes_str = "None"
+    click.echo(f"Static Routes: {routes_str}")
+
     click.echo(f"Zone: {network.zone}")
     click.echo(f"Datacenter: {network.datacenter}")
     click.echo(f"Routable: {network.routable}")

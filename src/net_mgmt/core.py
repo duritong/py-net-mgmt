@@ -120,12 +120,23 @@ class Reservation:
 
 
 @dataclass
+class StaticRoute:
+    cidr: str
+    gateway: Optional[str] = None
+
+
+@dataclass
 class Network:
     name: str
     cidr: Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
     vlan: Optional[int] = None
     bridge_domain: Optional[str] = None
     epg: Optional[str] = None
+    default_mtu: Optional[int] = None
+    dns_nameservers: Optional[List[str]] = None
+    dns_search: Optional[List[str]] = None
+    timeservers: Optional[List[str]] = None
+    static_routes: List[StaticRoute] = field(default_factory=list)
     zone: Optional[str] = None
     datacenter: Optional[str] = None
     routable: bool = True
@@ -140,6 +151,24 @@ class Network:
     def __post_init__(self):
         if isinstance(self.cidr, str):
             self.cidr = ipaddress.ip_network(self.cidr, strict=False)
+
+        # Ensure static routes are objects and validate the gateway
+        parsed_routes = []
+        for route in self.static_routes:
+            if isinstance(route, dict):
+                sr = StaticRoute(**route)
+            else:
+                sr = route
+
+            if not sr.gateway:
+                sr.gateway = str(self.cidr.network_address + 1)
+
+            gw_ip = ipaddress.ip_address(sr.gateway)
+            if gw_ip not in self.cidr:
+                raise ValueError(f"Static route gateway {sr.gateway} is not within network {self.cidr}")
+
+            parsed_routes.append(sr)
+        self.static_routes = parsed_routes
 
     def _get_system_reservations(self) -> List[Reservation]:
         sys_res = []

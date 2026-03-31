@@ -26,6 +26,25 @@ class TestNetwork(unittest.TestCase):
         # Internal: 10.0.0.2-5 (System)
         self.net = Network(name="test", cidr="10.0.0.0/24")
 
+    def test_static_routes(self):
+        # Valid static route
+        net = Network(
+            name="test", cidr="10.0.0.0/24", static_routes=[{"cidr": "192.168.1.0/24", "gateway": "10.0.0.1"}]
+        )
+        self.assertEqual(len(net.static_routes), 1)
+        self.assertEqual(net.static_routes[0].gateway, "10.0.0.1")
+
+        # Optional gateway static route (default to network address + 1)
+        net_optional = Network(name="test_optional", cidr="10.0.0.0/24", static_routes=[{"cidr": "192.168.2.0/24"}])
+        self.assertEqual(len(net_optional.static_routes), 1)
+        self.assertEqual(net_optional.static_routes[0].gateway, "10.0.0.1")
+
+        # Invalid static route
+        with self.assertRaisesRegex(ValueError, "Static route gateway 192.168.1.1 is not within network 10.0.0.0/24"):
+            Network(
+                name="test", cidr="10.0.0.0/24", static_routes=[{"cidr": "192.168.1.0/24", "gateway": "192.168.1.1"}]
+            )
+
     def test_system_reservations(self):
         eff_res = self.net.effective_reservations
         ids = [r.id for r in eff_res]

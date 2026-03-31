@@ -9,17 +9,18 @@ def generate_markdown_report(networks: List[Network], output_file: str):
         # 1. Network Overview
         f.write("# Network Overview\n\n")
 
-        f.write("| Name | CIDR | Context | VLAN | Bridge Domain | EPG | Zone | Datacenter | Description |\n")
-        f.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+        f.write("| Name | CIDR | Context | VLAN | Bridge Domain | EPG | MTU | Zone | Datacenter | Description |\n")
+        f.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 
         for network in networks:
             desc = network.description or ""
             dc = network.datacenter or ""
             zone = network.zone or ""
             context = network.context or "default"
+            mtu = network.default_mtu if network.default_mtu is not None else "None"
             f.write(
                 f"| {network.name} | {network.cidr} | {context} | {network.vlan} | {network.bridge_domain} "
-                f"| {network.epg} | {zone} | {dc} | {desc} |\n"
+                f"| {network.epg} | {mtu} | {zone} | {dc} | {desc} |\n"
             )
 
         # 2. Detailed Network Information
@@ -37,6 +38,23 @@ def generate_markdown_report(networks: List[Network], output_file: str):
             f.write(f"- **VLAN**: `{network.vlan}`\n")
             f.write(f"- **Bridge Domain**: `{network.bridge_domain}`\n")
             f.write(f"- **EPG**: `{network.epg}`\n")
+            f.write(f"- **MTU**: `{network.default_mtu}`\n")
+
+            dns_ns = ", ".join(network.dns_nameservers) if network.dns_nameservers else "None"
+            f.write(f"- **DNS Nameservers**: `{dns_ns}`\n")
+
+            dns_search = ", ".join(network.dns_search) if network.dns_search else "None"
+            f.write(f"- **DNS Search**: `{dns_search}`\n")
+
+            timeservers = ", ".join(network.timeservers) if network.timeservers else "None"
+            f.write(f"- **Timeservers**: `{timeservers}`\n")
+
+            if network.static_routes:
+                routes_str = ", ".join([f"{sr.cidr} via {sr.gateway}" for sr in network.static_routes])
+            else:
+                routes_str = "None"
+            f.write(f"- **Static Routes**: `{routes_str}`\n")
+
             f.write(f"- **Zone**: `{network.zone}`\n")
             f.write(f"- **Datacenter**: `{network.datacenter}`\n")
             f.write(f"- **Routable**: `{network.routable}`\n")

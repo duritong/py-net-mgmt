@@ -52,6 +52,11 @@ def load_network_from_file(file_path: str) -> Network:
         vlan=data.get("vlan"),
         bridge_domain=data.get("bridge_domain"),
         epg=data.get("epg"),
+        default_mtu=data.get("default_mtu"),
+        dns_nameservers=data.get("dns_nameservers"),
+        dns_search=data.get("dns_search"),
+        timeservers=data.get("timeservers"),
+        static_routes=data.get("static_routes", []),
         zone=data.get("zone"),
         datacenter=data.get("datacenter"),
         routable=data.get("routable", True),
@@ -110,6 +115,16 @@ def save_network_to_file(network: Network):
                 data["bridge_domain"] = network.bridge_domain
             if network.epg:
                 data["epg"] = network.epg
+            if network.default_mtu is not None:
+                data["default_mtu"] = network.default_mtu
+            if network.dns_nameservers:
+                data["dns_nameservers"] = network.dns_nameservers
+            if network.dns_search:
+                data["dns_search"] = network.dns_search
+            if network.timeservers:
+                data["timeservers"] = network.timeservers
+            if network.static_routes:
+                data["static_routes"] = [{"cidr": sr.cidr, "gateway": sr.gateway} for sr in network.static_routes]
             if network.zone:
                 data["zone"] = network.zone
             if network.datacenter:
