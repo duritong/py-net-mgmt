@@ -112,6 +112,17 @@ class TestNetwork(unittest.TestCase):
         ip = net.get_next_free_ip()
         self.assertEqual(str(ip), "10.0.0.1")
 
+    def test_unreserved_ranges_no_split(self):
+        # Create a network with no gateway or internal system reservations and no user reservations
+        import ipaddress
+
+        net = Network(name="global-ovn", cidr="10.3.128.0/18", reserve_gateway=False, reserve_internal=False)
+        unreserved = net.get_unreserved_ranges()
+
+        # With sys-network and sys-broadcast skipped, the unreserved range is exactly self.cidr
+        self.assertEqual(len(unreserved), 1)
+        self.assertEqual(unreserved[0], ipaddress.ip_network("10.3.128.0/18"))
+
     def test_allocation_outside_reservation(self):
         # Manually add invalid allocation
         self.net.allocations.append(Allocation(ip="10.0.0.99", hostname="rogue"))

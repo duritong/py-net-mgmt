@@ -83,51 +83,76 @@ def show(name, path):
         click.echo(f"Network '{name}' not found.")
         return
 
-    click.echo(f"Name: {network.name}")
-    click.echo(f"CIDR: {network.cidr}")
-    click.echo(f"Context: {network.context}")
-    click.echo(f"Description: {network.description}")
-    click.echo(f"VLAN: {network.vlan}")
-    click.echo(f"Bridge Domain: {network.bridge_domain}")
-    click.echo(f"EPG: {network.epg}")
-    click.echo(f"Default MTU: {network.default_mtu}")
-    click.echo(f"DNS Nameservers: {', '.join(network.dns_nameservers) if network.dns_nameservers else 'None'}")
-    click.echo(f"DNS Search: {', '.join(network.dns_search) if network.dns_search else 'None'}")
-    click.echo(f"Timeservers: {', '.join(network.timeservers) if network.timeservers else 'None'}")
+    import sys
+
+    import rich.box
+
+    width = 120 if not sys.stdout.isatty() else None
+    console = Console(width=width)
+
+    console.print(f"[bold cyan]Name:[/bold cyan] {network.name}")
+    console.print(f"[bold cyan]CIDR:[/bold cyan] {network.cidr}")
+    console.print(f"[bold cyan]Context:[/bold cyan] {network.context}")
+    console.print(f"[bold cyan]Description:[/bold cyan] {network.description or 'None'}")
+    console.print(f"[bold cyan]VLAN:[/bold cyan] {network.vlan}")
+    console.print(f"[bold cyan]Bridge Domain:[/bold cyan] {network.bridge_domain or 'None'}")
+    console.print(f"[bold cyan]EPG:[/bold cyan] {network.epg or 'None'}")
+    console.print(f"[bold cyan]Default MTU:[/bold cyan] {network.default_mtu}")
+
+    dns_ns = ", ".join(network.dns_nameservers) if network.dns_nameservers else "None"
+    console.print(f"[bold cyan]DNS Nameservers:[/bold cyan] {dns_ns}")
+
+    dns_search = ", ".join(network.dns_search) if network.dns_search else "None"
+    console.print(f"[bold cyan]DNS Search:[/bold cyan] {dns_search}")
+
+    timeservers = ", ".join(network.timeservers) if network.timeservers else "None"
+    console.print(f"[bold cyan]Timeservers:[/bold cyan] {timeservers}")
 
     if network.static_routes:
         routes_str = ", ".join([f"{sr.cidr} via {sr.gateway}" for sr in network.static_routes])
     else:
         routes_str = "None"
-    click.echo(f"Static Routes: {routes_str}")
+    console.print(f"[bold cyan]Static Routes:[/bold cyan] {routes_str}")
 
-    click.echo(f"Zone: {network.zone}")
-    click.echo(f"Datacenter: {network.datacenter}")
-    click.echo(f"Routable: {network.routable}")
-    click.echo(f"Reserve Gateway: {network.reserve_gateway}")
-    click.echo(f"Reserve Internal: {network.reserve_internal}")
+    console.print(f"[bold cyan]Zone:[/bold cyan] {network.zone or 'None'}")
+    console.print(f"[bold cyan]Datacenter:[/bold cyan] {network.datacenter or 'None'}")
+    console.print(f"[bold cyan]Routable:[/bold cyan] {network.routable}")
+    console.print(f"[bold cyan]Reserve Gateway:[/bold cyan] {network.reserve_gateway}")
+    console.print(f"[bold cyan]Reserve Internal:[/bold cyan] {network.reserve_internal}")
 
     if network.effective_reservations:
-        click.echo("\nReservations:")
-        click.echo(f"{'ID':<15} {'CIDR':<20} {'Comment':<30} {'Allocatable':<12} {'Allocations':<12} {'Usage':<10}")
-        click.echo("-" * 105)
+        console.print("\n[bold yellow]Reservations:[/bold yellow]")
+        table = Table(box=rich.box.SIMPLE)
+        table.add_column("ID", style="cyan")
+        table.add_column("CIDR", style="green")
+        table.add_column("Comment")
+        table.add_column("Allocatable", justify="center")
+        table.add_column("Allocations", justify="right")
+        table.add_column("Usage", justify="right")
+
         # Sort reservations by their starting IP address
         sorted_reservations = sorted(network.effective_reservations, key=lambda r: r.networks[0].network_address)
         for res in sorted_reservations:
             usage = network.get_reservation_usage(res.id)
-            alloc_count = usage["count"]
+            alloc_count = str(usage["count"])
             usage_pct = f"{usage['percent']:.1f}%"
-            click.echo(
-                f"{res.id:<15} {str(res.cidr):<20} {res.comment:<30} {str(res.allocatable):<12} "
-                f"{alloc_count:<12} {usage_pct:<10}"
+            table.add_row(
+                res.id,
+                str(res.cidr),
+                res.comment,
+                str(res.allocatable),
+                alloc_count,
+                usage_pct,
             )
+        console.print(table)
     else:
-        click.echo("\nNo reservations.")
+        console.print("\n[bold yellow]Reservations:[/bold yellow] None")
 
     if network.allocations:
-        click.echo("\nAllocations:")
-        click.echo(f"{'IP/CIDR':<30} {'Hostname/Comment':<40}")
-        click.echo("-" * 70)
+        console.print("\n[bold yellow]Allocations:[/bold yellow]")
+        table = Table(box=rich.box.SIMPLE)
+        table.add_column("IP/CIDR", style="green")
+        table.add_column("Hostname/Comment")
 
         # Sort allocations
         def sort_key(a):
@@ -141,16 +166,17 @@ def show(name, path):
         sorted_allocations = sorted(network.allocations, key=sort_key)
         for alloc in sorted_allocations:
             if alloc.ip:
-                click.echo(f"{str(alloc.ip):<30} {alloc.hostname:<40}")
+                table.add_row(str(alloc.ip), alloc.hostname)
             else:
-                click.echo(f"{alloc.cidr:<30} {alloc.comment:<40}")
+                table.add_row(alloc.cidr, alloc.comment)
+        console.print(table)
 
     # Show unreserved ranges
     unreserved = network.get_unreserved_ranges()
     if unreserved:
-        click.echo("\nUnreserved Ranges:")
+        console.print("\n[bold yellow]Unreserved Ranges:[/bold yellow]")
         for net in unreserved:
-            click.echo(f"  {str(net)}")
+            console.print(f"  [green]{str(net)}[/green]")
 
 
 @cli.command()

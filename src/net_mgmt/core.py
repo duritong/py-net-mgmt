@@ -251,6 +251,8 @@ class Network:
         reservations = self.effective_reservations
 
         for res in reservations:
+            if res.id in ("sys-network", "sys-broadcast"):
+                continue
             for res_net in res.networks:
                 new_free_nets = []
                 for free_net in free_nets:
