@@ -8,28 +8,95 @@ from .core import Network
 def generate_markdown_report(networks: List[Network], output_dir: str):
     os.makedirs(output_dir, exist_ok=True)
 
+    # Sort networks hierarchically: Datacenter -> Zone -> Bridge Domain -> EPG -> Subnet
+    # (ordered alphabetically by name)
+    def get_sort_key(net: Network):
+        dc_val = net.datacenter or ""
+        dc_key = (dc_val == "", dc_val.lower())
+
+        zone_val = net.zone or ""
+        zone_key = (zone_val == "", zone_val.lower())
+
+        bd_val = net.bridge_domain or ""
+        bd_key = (bd_val == "", bd_val.lower())
+
+        epg_val = net.epg or ""
+        epg_key = (epg_val == "", epg_val.lower())
+
+        name_val = net.name or ""
+        name_key = (name_val == "", name_val.lower())
+
+        return (dc_key, zone_key, bd_key, epg_key, name_key)
+
+    sorted_networks = sorted(networks, key=get_sort_key)
+
     # 1. Network Overview -> README.md
     readme_path = os.path.join(output_dir, "README.md")
     with open(readme_path, "w") as f:
         f.write("# Network Overview\n\n")
 
-        f.write("| Name | CIDR | Context | VLAN | Bridge Domain | EPG | MTU | Zone | Datacenter | Description |\n")
-        f.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+        # Table columns: Name, CIDR, Context, VLAN, Description
+        f.write("| Name | CIDR | Context | VLAN | Description |\n")
+        f.write("| --- | --- | --- | --- | --- |\n")
 
-        for network in networks:
-            desc = network.description or ""
-            dc = network.datacenter or ""
-            zone = network.zone or ""
-            context = network.context or "default"
-            mtu = network.default_mtu if network.default_mtu is not None else "None"
-            f.write(
-                f"| [{network.name}]({network.name}.md) | {network.cidr} | {context} | "
-                f"{network.vlan} | {network.bridge_domain} | {network.epg} | {mtu} | "
-                f"{zone} | {dc} | {desc} |\n"
-            )
+        current_dc = None
+        current_zone = None
+        current_bd = None
+        current_epg = None
+
+        first_iter = True
+
+        for network in sorted_networks:
+            is_unassigned = not (network.datacenter or network.zone or network.bridge_domain or network.epg)
+
+            if is_unassigned:
+                context = network.context or "default"
+                vlan_str = str(network.vlan) if network.vlan is not None else "None"
+                desc = network.description or ""
+                # Flat row at the bottom
+                f.write(f"| [{network.name}]({network.name}.md) | {network.cidr} | {context} | {vlan_str} | {desc} |\n")
+            else:
+                dc_val = network.datacenter or "unassigned"
+                zone_val = network.zone or "unassigned"
+                bd_val = network.bridge_domain or "unassigned"
+                epg_val = network.epg or "unassigned"
+
+                # Check if any parent grouping level has changed
+                dc_changed = first_iter or (dc_val != current_dc)
+                zone_changed = dc_changed or (zone_val != current_zone)
+                bd_changed = zone_changed or (bd_val != current_bd)
+                epg_changed = bd_changed or (epg_val != current_epg)
+
+                first_iter = False
+
+                if dc_changed:
+                    current_dc = dc_val
+                    f.write(f"| **🏢 {current_dc}** | | | | |\n")
+
+                if zone_changed:
+                    current_zone = zone_val
+                    f.write(f"| ├── **📍 {current_zone}** | | | | |\n")
+
+                if bd_changed:
+                    current_bd = bd_val
+                    f.write(f"| │   ├── **🌉 {current_bd}** | | | | |\n")
+
+                if epg_changed:
+                    current_epg = epg_val
+                    f.write(f"| │   │   ├── **🏷️ {current_epg}** | | | | |\n")
+
+                context = network.context or "default"
+                vlan_str = str(network.vlan) if network.vlan is not None else "None"
+                desc = network.description or ""
+
+                # Subnet row
+                f.write(
+                    f"| │   │   │   ├── [{network.name}]({network.name}.md) | {network.cidr} | {context} | "
+                    f"{vlan_str} | {desc} |\n"
+                )
 
     # 2. Detailed Network Information -> individual files
-    for network in networks:
+    for network in sorted_networks:
         net_path = os.path.join(output_dir, f"{network.name}.md")
         with open(net_path, "w") as f:
             f.write(f"# {network.name}\n\n")

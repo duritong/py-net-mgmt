@@ -29,7 +29,7 @@ class TestMarkdownReport(unittest.TestCase):
             readme_content = f.read()
 
         self.assertIn("| Context |", readme_content)
-        self.assertIn("| [test_net](test_net.md) | 192.168.100.0/24 | default |", readme_content)
+        self.assertIn("[test_net](test_net.md) | 192.168.100.0/24 | default |", readme_content)
 
         net_path = os.path.join(self.output_dir, "test_net.md")
         self.assertTrue(os.path.exists(net_path))
@@ -46,6 +46,62 @@ class TestMarkdownReport(unittest.TestCase):
         self.assertIn("**Reserve Gateway**: `True`", net_content)
         self.assertIn("## Unreserved Ranges", net_content)
         self.assertIn("192.168.100.6/31", net_content)
+
+    def test_markdown_report_sorting(self):
+        # Create networks with varying datacenter, zone, bridge_domain, epg, and vlan settings
+        net1 = Network(name="net1", cidr="10.0.1.0/24", datacenter="DC2", zone="zoneB", epg="epgA", vlan=10)
+        net2 = Network(
+            name="net2",
+            cidr="10.0.2.0/24",
+            datacenter="DC1",
+            zone="zoneA",
+            bridge_domain="BD_Prod",
+            epg="epgA",
+            vlan=20,
+        )
+        net3 = Network(
+            name="net3", cidr="10.0.3.0/24", datacenter="DC1", zone="zoneA", bridge_domain="BD_Prod", epg="epgA", vlan=5
+        )
+        net4 = Network(name="net4", cidr="10.0.4.0/24", datacenter="DC1", zone="zoneB", epg="epgA", vlan=10)
+        net5 = Network(name="net5", cidr="10.0.5.0/24", datacenter=None, zone="zoneA", epg="epgA", vlan=10)
+        net6 = Network(
+            name="net6", cidr="10.0.6.0/24", datacenter="DC1", zone="zoneA", bridge_domain="BD_DMZ", epg="epgA", vlan=12
+        )
+
+        generate_markdown_report([net1, net2, net3, net4, net5, net6], self.output_dir)
+
+        readme_path = os.path.join(self.output_dir, "README.md")
+        self.assertTrue(os.path.exists(readme_path))
+
+        with open(readme_path, "r") as f:
+            readme_content = f.read()
+
+        # Expected sorting order:
+        # 1. net6: DC1, zoneA, BD_DMZ, epgA (BD_DMZ sorts alphabetically before BD_Prod)
+        # 2. net2: DC1, zoneA, BD_Prod, epgA, name "net2" (net2 sorts alphabetically before net3)
+        # 3. net3: DC1, zoneA, BD_Prod, epgA, name "net3"
+        # 4. net4: DC1, zoneB, unassigned, epgA
+        # 5. net1: DC2, zoneB, unassigned, epgA
+        # 6. net5: None, zoneA, unassigned, epgA (None DC sorts last)
+        pos6 = readme_content.find("[net6](net6.md)")
+        pos3 = readme_content.find("[net3](net3.md)")
+        pos2 = readme_content.find("[net2](net2.md)")
+        pos4 = readme_content.find("[net4](net4.md)")
+        pos1 = readme_content.find("[net1](net1.md)")
+        pos5 = readme_content.find("[net5](net5.md)")
+
+        self.assertNotEqual(pos6, -1)
+        self.assertNotEqual(pos3, -1)
+        self.assertNotEqual(pos2, -1)
+        self.assertNotEqual(pos4, -1)
+        self.assertNotEqual(pos1, -1)
+        self.assertNotEqual(pos5, -1)
+
+        self.assertLess(pos6, pos2)
+        self.assertLess(pos2, pos3)
+        self.assertLess(pos3, pos4)
+        self.assertLess(pos4, pos1)
+        self.assertLess(pos1, pos5)
 
 
 if __name__ == "__main__":

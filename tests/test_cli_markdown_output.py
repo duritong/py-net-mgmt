@@ -39,7 +39,7 @@ class TestCliMarkdownOutput(unittest.TestCase):
             readme_content = f.read()
         self.assertIn("# Network Overview", readme_content)
         self.assertIn("| Context |", readme_content)
-        self.assertIn("| [test_net](test_net.md) | 192.168.100.0/24 | default |", readme_content)
+        self.assertIn("[test_net](test_net.md) | 192.168.100.0/24 | default |", readme_content)
 
         net_path = os.path.join(self.custom_output_dir, "test_net.md")
         self.assertTrue(os.path.exists(net_path))
