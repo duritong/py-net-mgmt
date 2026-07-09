@@ -1,6 +1,8 @@
 import ipaddress
 
 import click
+from rich.console import Console
+from rich.table import Table
 
 from .db import get_database, set_db_path
 
@@ -39,17 +41,28 @@ def list(path):
         click.echo("No networks found.")
         return
 
-    click.echo(
-        f"{'Name':<20} {'CIDR':<20} {'Context':<15} {'Datacenter':<15} {'Zone':<15} {'MTU':<8} {'Description':<40}"
-    )
-    click.echo("-" * 134)
+    import sys
+
+    width = 120 if not sys.stdout.isatty() else None
+    console = Console(width=width)
+    table = Table()
+    table.add_column("Name", style="cyan")
+    table.add_column("CIDR", style="green")
+    table.add_column("Context", style="magenta")
+    table.add_column("Datacenter", style="yellow")
+    table.add_column("Zone", style="blue")
+    table.add_column("MTU", justify="right")
+    table.add_column("Description")
+
     for net in networks:
         desc = net.description or ""
         dc = net.datacenter or ""
         zone = net.zone or ""
         context = net.context or "default"
         mtu = str(net.default_mtu) if net.default_mtu is not None else ""
-        click.echo(f"{net.name:<20} {str(net.cidr):<20} {context:<15} {dc:<15} {zone:<15} {mtu:<8} {desc:<40}")
+        table.add_row(net.name, str(net.cidr), context, dc, zone, mtu, desc)
+
+    console.print(table)
 
 
 @cli.command()
@@ -321,9 +334,9 @@ def find_or_allocate_range(network_name, comment, count, reservation_id, path):
 
 @cli.command()
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-@click.option("--output", "-o", default="overview.md", help="Output markdown file")
+@click.option("--output", "-o", default="docs", help="Output directory for markdown files")
 def generate_markdown(path, output):
-    """Generate markdown overview"""
+    """Generate markdown overview in an output directory"""
     from .reports import generate_markdown_report
 
     set_db_path(path)
@@ -334,7 +347,7 @@ def generate_markdown(path, output):
         exit(1)
 
     generate_markdown_report(networks, output)
-    click.echo(f"Markdown report generated at {output}")
+    click.echo(f"Markdown reports generated in {output}")
 
 
 def main():

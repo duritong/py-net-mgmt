@@ -10,7 +10,7 @@ pip install .
 
 ## Running from Source (No Installation)
 
-If you want to try out the CLI without installing it, ensure you have the dependencies installed (`pip install click PyYAML Jinja2`) and run it as a module from the `src` directory:
+If you want to try out the CLI without installing it, ensure you have the dependencies installed (`pip install click PyYAML Jinja2 ruamel.yaml filelock rich`) and run it as a module from the `src` directory:
 
 ```bash
 # Add the src directory to your PYTHONPATH
@@ -89,9 +89,9 @@ net-mgmt add-allocation <network_name> --cidr <cidr_or_range> --comment <comment
 ### Generate Markdown Overview
 
 ```bash
-net-mgmt generate-markdown --output overview.md
+net-mgmt generate-markdown --output docs
 # Or use the short alias
-net-mgmt generate-markdown -o overview.md
+net-mgmt generate-markdown -o docs
 ```
 
 ## Library Usage

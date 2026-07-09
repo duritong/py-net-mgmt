@@ -1,12 +1,16 @@
 import ipaddress
+import os
 from typing import List
 
 from .core import Network
 
 
-def generate_markdown_report(networks: List[Network], output_file: str):
-    with open(output_file, "w") as f:
-        # 1. Network Overview
+def generate_markdown_report(networks: List[Network], output_dir: str):
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 1. Network Overview -> README.md
+    readme_path = os.path.join(output_dir, "README.md")
+    with open(readme_path, "w") as f:
         f.write("# Network Overview\n\n")
 
         f.write("| Name | CIDR | Context | VLAN | Bridge Domain | EPG | MTU | Zone | Datacenter | Description |\n")
@@ -19,18 +23,19 @@ def generate_markdown_report(networks: List[Network], output_file: str):
             context = network.context or "default"
             mtu = network.default_mtu if network.default_mtu is not None else "None"
             f.write(
-                f"| {network.name} | {network.cidr} | {context} | {network.vlan} | {network.bridge_domain} "
-                f"| {network.epg} | {mtu} | {zone} | {dc} | {desc} |\n"
+                f"| [{network.name}]({network.name}.md) | {network.cidr} | {context} | "
+                f"{network.vlan} | {network.bridge_domain} | {network.epg} | {mtu} | "
+                f"{zone} | {dc} | {desc} |\n"
             )
 
-        # 2. Detailed Network Information
-        f.write("\n# Network Details\n")
-
-        for network in networks:
-            f.write(f"\n## {network.name}\n\n")
+    # 2. Detailed Network Information -> individual files
+    for network in networks:
+        net_path = os.path.join(output_dir, f"{network.name}.md")
+        with open(net_path, "w") as f:
+            f.write(f"# {network.name}\n\n")
 
             # Network Settings
-            f.write("### Settings\n\n")
+            f.write("## Settings\n\n")
             f.write(f"- **CIDR**: `{network.cidr}`\n")
             f.write(f"- **Context**: `{network.context}`\n")
             if network.description:
@@ -62,7 +67,7 @@ def generate_markdown_report(networks: List[Network], output_file: str):
             f.write(f"- **Reserve Internal**: `{network.reserve_internal}`\n")
 
             # Reservations
-            f.write("\n### Reservations\n\n")
+            f.write("\n## Reservations\n\n")
             if network.effective_reservations:
                 f.write("| ID | CIDR | Comment | Allocatable | Allocations | Usage |\n")
                 f.write("| --- | --- | --- | --- | --- | --- |\n")
@@ -80,7 +85,7 @@ def generate_markdown_report(networks: List[Network], output_file: str):
 
             # Allocations
             if network.allocations:
-                f.write("\n### Allocations\n\n")
+                f.write("\n## Allocations\n\n")
                 f.write("| IP/CIDR | Hostname/Comment |\n")
                 f.write("| --- | --- |\n")
 
@@ -103,6 +108,6 @@ def generate_markdown_report(networks: List[Network], output_file: str):
             # Unreserved Ranges
             unreserved = network.get_unreserved_ranges()
             if unreserved:
-                f.write("\n### Unreserved Ranges\n\n")
+                f.write("\n## Unreserved Ranges\n\n")
                 for net in unreserved:
                     f.write(f"- `{net}`\n")
