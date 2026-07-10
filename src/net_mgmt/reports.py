@@ -71,27 +71,39 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
 
                 if dc_changed:
                     current_dc = dc_val
-                    f.write(f"| **🏢 {current_dc}** | | | | |\n")
+                    f.write(f"| **🏢 {current_dc}** | &nbsp; | &nbsp; | &nbsp; | &nbsp; |\n")
 
                 if zone_changed:
                     current_zone = zone_val
-                    f.write(f"| ├── **📍 {current_zone}** | | | | |\n")
+                    f.write(
+                        f"| &nbsp;&nbsp;&nbsp;&nbsp;├── **📍 {current_zone}** | &nbsp; | &nbsp; | &nbsp; | &nbsp; |\n"
+                    )
 
                 if bd_changed:
                     current_bd = bd_val
-                    f.write(f"| │   ├── **🌉 {current_bd}** | | | | |\n")
+                    f.write(
+                        f"| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── **🌉 {current_bd}** | "
+                        f"&nbsp; | &nbsp; | &nbsp; | &nbsp; |\n"
+                    )
 
                 if epg_changed:
                     current_epg = epg_val
-                    f.write(f"| │   │   ├── **🏷️ {current_epg}** | | | | |\n")
+                    f.write(
+                        f"| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                        f"&nbsp;&nbsp;&nbsp;&nbsp;├── **🏷️ {current_epg}** | "
+                        f"&nbsp; | &nbsp; | &nbsp; | &nbsp; |\n"
+                    )
 
                 context = network.context or "default"
                 vlan_str = str(network.vlan) if network.vlan is not None else "None"
                 desc = network.description or ""
 
-                # Subnet row
+                # Subnet row with non-breaking space indentation instead of U+2502
+                # vertical box drawings to avoid column parsing bugs
                 f.write(
-                    f"| │   │   │   ├── [{network.name}]({network.name}.md) | {network.cidr} | {context} | "
+                    f"| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                    f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── "
+                    f"[{network.name}]({network.name}.md) | {network.cidr} | {context} | "
                     f"{vlan_str} | {desc} |\n"
                 )
 

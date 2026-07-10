@@ -28,8 +28,6 @@ reservations:
 allocations:
   - ip: 10.0.2.20
     hostname: app-01
-  - ip: 10.0.2.20
-    hostname: app-01
   - ip: 10.0.2.21
     hostname: app-02
   - cidr: 10.0.2.128/27
