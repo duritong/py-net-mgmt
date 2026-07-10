@@ -187,8 +187,8 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
                         f.write(f"| {alloc.cidr} | {alloc.comment} |\n")
 
             # Unreserved Ranges
-            unreserved = network.get_unreserved_ranges()
+            unreserved = network.get_unreserved_display_ranges()
             if unreserved:
                 f.write("\n## Unreserved Ranges\n\n")
-                for net in unreserved:
-                    f.write(f"- `{net}`\n")
+                for rng in unreserved:
+                    f.write(f"- `{rng}`\n")

@@ -51,7 +51,7 @@ allocations:
         self.assertIn("Usage", result.output)
         self.assertIn("9.4%", result.output)
         self.assertIn("Unreserved Ranges:", result.output)
-        self.assertIn("192.168.100.6/31", result.output)
+        self.assertIn("192.168.100.6 - 192.168.100.9", result.output)
 
 
 if __name__ == "__main__":

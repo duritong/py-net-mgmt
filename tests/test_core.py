@@ -123,6 +123,22 @@ class TestNetwork(unittest.TestCase):
         self.assertEqual(len(unreserved), 1)
         self.assertEqual(unreserved[0], ipaddress.ip_network("10.3.128.0/18"))
 
+    def test_unreserved_ranges_filter_boundaries(self):
+        # Create a network 10.0.0.0/24 with 10.0.0.1 reserved (adjacent to network address)
+        # And 10.0.0.254 reserved (adjacent to broadcast address)
+
+        net = Network(name="boundary-net", cidr="10.0.0.0/24", reserve_gateway=False, reserve_internal=False)
+        net.add_reservation(id="gw", cidr="10.0.0.1", comment="gw", allocatable=False)
+        net.add_reservation(id="last", cidr="10.0.0.254", comment="last", allocatable=False)
+
+        unreserved = net.get_unreserved_ranges()
+
+        # None of the unreserved ranges should be the unusable network address (10.0.0.0/32)
+        # or the broadcast address (10.0.0.255/32)
+        for r in unreserved:
+            self.assertNotEqual(str(r), "10.0.0.0/32")
+            self.assertNotEqual(str(r), "10.0.0.255/32")
+
     def test_allocation_outside_reservation(self):
         # Manually add invalid allocation
         self.net.allocations.append(Allocation(ip="10.0.0.99", hostname="rogue"))

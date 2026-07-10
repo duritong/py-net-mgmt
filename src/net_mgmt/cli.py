@@ -172,11 +172,11 @@ def show(name, path):
         console.print(table)
 
     # Show unreserved ranges
-    unreserved = network.get_unreserved_ranges()
+    unreserved = network.get_unreserved_display_ranges()
     if unreserved:
         console.print("\n[bold yellow]Unreserved Ranges:[/bold yellow]")
-        for net in unreserved:
-            console.print(f"  [green]{str(net)}[/green]")
+        for rng in unreserved:
+            console.print(f"  [green]{rng}[/green]")
 
 
 @cli.command()

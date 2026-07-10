@@ -45,7 +45,7 @@ class TestMarkdownReport(unittest.TestCase):
         self.assertIn("1/11 (9.1%)", net_content)
         self.assertIn("**Reserve Gateway**: `True`", net_content)
         self.assertIn("## Unreserved Ranges", net_content)
-        self.assertIn("192.168.100.6/31", net_content)
+        self.assertIn("192.168.100.6 - 192.168.100.9", net_content)
 
     def test_markdown_report_sorting(self):
         # Create networks with varying datacenter, zone, bridge_domain, epg, and vlan settings

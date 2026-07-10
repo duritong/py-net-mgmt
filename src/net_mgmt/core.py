@@ -277,7 +277,54 @@ class Network:
                         new_free_nets.append(free_net)
                 free_nets = new_free_nets
 
-        return sorted(free_nets, key=lambda x: x.network_address)
+        # Filter out any single-IP boundary /32 or /128 networks (the network address or broadcast address)
+        filtered_nets = []
+        for net in free_nets:
+            if net.num_addresses == 1:
+                if net.network_address == self.cidr.network_address:
+                    continue
+                if isinstance(self.cidr, ipaddress.IPv4Network) and net.network_address == self.cidr.broadcast_address:
+                    continue
+            filtered_nets.append(net)
+
+        return sorted(filtered_nets, key=lambda x: x.network_address)
+
+    def get_unreserved_display_ranges(self) -> List[str]:
+        """Merge adjacent unreserved CIDR blocks into contiguous human-readable IP ranges."""
+        nets = self.get_unreserved_ranges()
+        if not nets:
+            return []
+
+        ranges = []
+        current_start = None
+        current_end = None
+
+        for net in nets:
+            net_start = net.network_address
+            net_end = net.broadcast_address
+
+            if current_start is None:
+                current_start = net_start
+                current_end = net_end
+            else:
+                if int(net_start) == int(current_end) + 1:
+                    current_end = net_end
+                else:
+                    ranges.append((current_start, current_end))
+                    current_start = net_start
+                    current_end = net_end
+
+        if current_start is not None:
+            ranges.append((current_start, current_end))
+
+        formatted = []
+        for start, end in ranges:
+            if start == end:
+                formatted.append(f"{start}")
+            else:
+                formatted.append(f"{start} - {end}")
+
+        return formatted
 
     def get_reservation_usage(self, reservation_id: str):
         """Get usage statistics for a reservation."""
