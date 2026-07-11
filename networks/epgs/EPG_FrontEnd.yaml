@@ -1,0 +1,2 @@
+bridge_domain: BD_DMZ
+vlan: 20

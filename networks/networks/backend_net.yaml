@@ -1,0 +1,28 @@
+cidr: 10.0.2.0/24
+routable: true
+reserve_gateway: false
+reserve_internal: true
+epg: EPG_App
+description: Application Backend
+reservations:
+- id: custom-gw
+  cidr: 10.0.2.1/32
+  comment: Custom Gateway Config
+- id: app-cluster
+  cidr: 10.0.2.20-10.0.2.30
+  comment: App Server Cluster
+  allocatable: true
+- id: db-vip
+  cidr: 10.0.2.50/32
+  comment: Database VIP
+- id: dynamic-pool
+  cidr: 10.0.2.128/26
+  comment: Dynamic Allocations
+  allocatable: true
+allocations:
+- ip: 10.0.2.20
+  hostname: app-01
+- ip: 10.0.2.21
+  hostname: app-02
+- cidr: 10.0.2.128/27
+  comment: Kubernetes Pod Subnet

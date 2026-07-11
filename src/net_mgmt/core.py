@@ -131,6 +131,7 @@ class Network:
     cidr: Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
     vlan: Optional[int] = None
     bridge_domain: Optional[str] = None
+    environment: Optional[str] = None
     epg: Optional[str] = None
     default_mtu: Optional[int] = None
     dns_nameservers: Optional[List[str]] = None
@@ -655,3 +656,34 @@ def validate_network_list(networks: List[Network]):
 
     for ctx, nets in context_groups.items():
         check_overlaps(nets, f"context '{ctx}'")
+
+
+def query_vlans(
+    networks: List[Network],
+    environment: Optional[str] = None,
+    zone: Optional[str] = None,
+    datacenter: Optional[str] = None,
+    bridge_domain: Optional[str] = None,
+    epg: Optional[str] = None,
+) -> List[int]:
+    """
+    Retrieve unique, sorted VLAN IDs from networks matching any combination
+    of Datacenter, Zone, Bridge Domain, Environment, and EPG filters.
+    """
+    vlans = set()
+    for net in networks:
+        if datacenter and (not net.datacenter or net.datacenter.lower() != datacenter.lower()):
+            continue
+        if zone and (not net.zone or net.zone.lower() != zone.lower()):
+            continue
+        if bridge_domain and (not net.bridge_domain or net.bridge_domain.lower() != bridge_domain.lower()):
+            continue
+        if environment and (not net.environment or net.environment.lower() != environment.lower()):
+            continue
+        if epg and (not net.epg or net.epg.lower() != epg.lower()):
+            continue
+
+        if net.vlan is not None:
+            vlans.add(net.vlan)
+
+    return sorted(list(vlans))

@@ -1,0 +1,16 @@
+cidr: 10.0.1.0/24
+routable: true
+reserve_gateway: true
+reserve_internal: true
+epg: EPG_FrontEnd
+description: Public Facing DMZ
+reservations:
+- id: server-pool
+  cidr: 10.0.1.10-10.0.1.50
+  comment: Web Server Pool
+  allocatable: true
+allocations:
+- ip: 10.0.1.10
+  hostname: web-dmz-01
+- ip: 10.0.1.11
+  hostname: web-dmz-02

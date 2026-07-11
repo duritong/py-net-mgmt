@@ -1,0 +1,22 @@
+cidr: 10.0.0.0/24
+routable: true
+reserve_gateway: false
+reserve_internal: false
+epg: EPG_Web
+description: Production Web Tier
+reservations:
+- id: gw
+  cidr: 10.0.0.1/32
+  comment: Gateway
+- id: vip-lb
+  cidr: 10.0.0.10/32
+  comment: Load Balancer VIP
+- id: pool-01
+  cidr: 10.0.0.20-10.0.0.30
+  comment: Reserved Pool
+  allocatable: true
+allocations:
+- ip: 10.0.0.20
+  hostname: host-01
+- cidr: 10.0.0.25-10.0.0.26
+  comment: Management Cluster

@@ -1,0 +1,7 @@
+cidr: 10.3.128.0/18
+routable: false
+reserve_gateway: false
+reserve_internal: false
+datacenter: global
+zone: global
+description: OVN Cluster internal network

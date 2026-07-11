@@ -120,6 +120,34 @@ class TestJinjaRendering(unittest.TestCase):
         template3 = self.env.from_string("{% set allocs = net | query_allocations('notfound') %}{{ allocs | length }}")
         self.assertEqual(template3.render(net=self.networks[0]), "0")
 
+    def test_query_vlans_filter(self):
+        # Create networks with environment, dc, zone metadata
+        nets = [
+            Network(name="n1", cidr="10.0.1.0/24", vlan=10, datacenter="DC1", zone="Z1", environment="prod"),
+            Network(name="n2", cidr="10.0.2.0/24", vlan=20, datacenter="DC1", zone="Z2", environment="prod"),
+            Network(name="n3", cidr="10.0.3.0/24", vlan=30, datacenter="DC2", zone="Z1", environment="prod"),
+            Network(name="n4", cidr="10.0.4.0/24", vlan=40, datacenter="DC1", zone="Z1", environment="dev"),
+        ]
+
+        # Explicit usage: networks | query_vlans(environment='prod', datacenter='DC1') -> [10, 20]
+        template = self.env.from_string(
+            "{{ (networks | query_vlans(environment='prod', datacenter='DC1')) | join(',') }}"
+        )
+        self.assertEqual(template.render(networks=nets), "10,20")
+
+    @patch("src.net_mgmt.jinja.get_database")
+    def test_vlans_in_environment_filter(self, mock_get_db):
+        nets = [
+            Network(name="n1", cidr="10.0.1.0/24", vlan=10, environment="prod"),
+            Network(name="n2", cidr="10.0.2.0/24", vlan=20, environment="prod"),
+            Network(name="n3", cidr="10.0.3.0/24", vlan=30, environment="dev"),
+        ]
+        mock_get_db.return_value = nets
+
+        # Implicit usage: 'prod' | vlans_in_environment
+        template = self.env.from_string("{{ 'prod' | vlans_in_environment | join(',') }}")
+        self.assertEqual(template.render(), "10,20")
+
 
 if __name__ == "__main__":
     unittest.main()

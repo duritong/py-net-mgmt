@@ -8,7 +8,7 @@ from .core import Network
 def generate_markdown_report(networks: List[Network], output_dir: str):
     os.makedirs(output_dir, exist_ok=True)
 
-    # Sort networks hierarchically: Datacenter -> Zone -> Bridge Domain -> EPG -> Subnet
+    # Sort networks hierarchically: Datacenter -> Zone -> Bridge Domain -> Environment -> EPG -> Subnet
     # (ordered alphabetically by name)
     def get_sort_key(net: Network):
         dc_val = net.datacenter or ""
@@ -20,13 +20,16 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
         bd_val = net.bridge_domain or ""
         bd_key = (bd_val == "", bd_val.lower())
 
+        env_val = net.environment or ""
+        env_key = (env_val == "", env_val.lower())
+
         epg_val = net.epg or ""
         epg_key = (epg_val == "", epg_val.lower())
 
         name_val = net.name or ""
         name_key = (name_val == "", name_val.lower())
 
-        return (dc_key, zone_key, bd_key, epg_key, name_key)
+        return (dc_key, zone_key, bd_key, env_key, epg_key, name_key)
 
     sorted_networks = sorted(networks, key=get_sort_key)
 
@@ -38,6 +41,7 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
         current_dc = None
         current_zone = None
         current_bd = None
+        current_env = None
         current_epg = None
 
         first_iter = True
@@ -45,7 +49,9 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
         unassigned_header_written = False
 
         for network in sorted_networks:
-            is_unassigned = not (network.datacenter or network.zone or network.bridge_domain or network.epg)
+            is_unassigned = not (
+                network.datacenter or network.zone or network.bridge_domain or network.environment or network.epg
+            )
 
             if is_unassigned:
                 if in_table:
@@ -67,17 +73,19 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
                 dc_val = network.datacenter or "unassigned"
                 zone_val = network.zone or "unassigned"
                 bd_val = network.bridge_domain or "unassigned"
+                env_val = network.environment or "unassigned"
                 epg_val = network.epg or "unassigned"
 
                 # Check if any parent grouping level has changed
                 dc_changed = first_iter or (dc_val != current_dc)
                 zone_changed = dc_changed or (zone_val != current_zone)
                 bd_changed = zone_changed or (bd_val != current_bd)
-                epg_changed = bd_changed or (epg_val != current_epg)
+                env_changed = bd_changed or (env_val != current_env)
+                epg_changed = env_changed or (epg_val != current_epg)
 
                 first_iter = False
 
-                if dc_changed or zone_changed or bd_changed or epg_changed:
+                if dc_changed or zone_changed or bd_changed or env_changed or epg_changed:
                     if in_table:
                         f.write("\n")
                         in_table = False
@@ -94,9 +102,13 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
                         current_bd = bd_val
                         f.write(f"\n#### 🌉 Bridge Domain: {current_bd}\n")
 
+                    if env_changed:
+                        current_env = env_val
+                        f.write(f"\n##### 🌍 Environment: {current_env}\n")
+
                     if epg_changed:
                         current_epg = epg_val
-                        f.write(f"\n##### 🏷️ EPG: {current_epg}\n")
+                        f.write(f"\n###### 🏷️ EPG: {current_epg}\n")
 
                     # Start new flat table
                     f.write("\n| Name | CIDR | Context | VLAN | Description |\n")
@@ -123,6 +135,7 @@ def generate_markdown_report(networks: List[Network], output_dir: str):
                 f.write(f"- **Description**: {network.description}\n")
             f.write(f"- **VLAN**: `{network.vlan}`\n")
             f.write(f"- **Bridge Domain**: `{network.bridge_domain}`\n")
+            f.write(f"- **Environment**: `{network.environment}`\n")
             f.write(f"- **EPG**: `{network.epg}`\n")
             f.write(f"- **MTU**: `{network.default_mtu}`\n")
 

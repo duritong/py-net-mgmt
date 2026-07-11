@@ -1,0 +1,8 @@
+cidr: 10.0.0.128/25
+routable: false
+reserve_gateway: true
+reserve_internal: true
+context: isolated
+vlan: 20
+datacenter: DC_Frankfurt
+description: Overlapping Network but not routable

@@ -51,6 +51,7 @@ def list(path):
     table.add_column("Context", style="magenta")
     table.add_column("Datacenter", style="yellow")
     table.add_column("Zone", style="blue")
+    table.add_column("Environment", style="white")
     table.add_column("MTU", justify="right")
     table.add_column("Description")
 
@@ -59,8 +60,9 @@ def list(path):
         dc = net.datacenter or ""
         zone = net.zone or ""
         context = net.context or "default"
+        env = net.environment or ""
         mtu = str(net.default_mtu) if net.default_mtu is not None else ""
-        table.add_row(net.name, str(net.cidr), context, dc, zone, mtu, desc)
+        table.add_row(net.name, str(net.cidr), context, dc, zone, env, mtu, desc)
 
     console.print(table)
 
@@ -96,6 +98,7 @@ def show(name, path):
     console.print(f"[bold cyan]Description:[/bold cyan] {network.description or 'None'}")
     console.print(f"[bold cyan]VLAN:[/bold cyan] {network.vlan}")
     console.print(f"[bold cyan]Bridge Domain:[/bold cyan] {network.bridge_domain or 'None'}")
+    console.print(f"[bold cyan]Environment:[/bold cyan] {network.environment or 'None'}")
     console.print(f"[bold cyan]EPG:[/bold cyan] {network.epg or 'None'}")
     console.print(f"[bold cyan]Default MTU:[/bold cyan] {network.default_mtu}")
 
@@ -358,6 +361,40 @@ def find_or_allocate_range(network_name, comment, count, reservation_id, path):
         exit(1)
 
 
+@cli.command("get-vlans")
+@click.option("--environment", "-env", help="Filter by Environment")
+@click.option("--zone", "-z", help="Filter by Zone")
+@click.option("--datacenter", "-dc", help="Filter by Datacenter")
+@click.option("--bridge-domain", "-bd", help="Filter by Bridge Domain")
+@click.option("--epg", help="Filter by EPG")
+@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
+def get_vlans(environment, zone, datacenter, bridge_domain, epg, path):
+    """Query unique VLAN IDs matching hierarchical filters"""
+    set_db_path(path)
+    try:
+        networks = get_database()
+    except ValueError as e:
+        click.echo(f"Validation Error: {e}")
+        exit(1)
+
+    from .core import query_vlans
+
+    vlans = query_vlans(
+        networks,
+        environment=environment,
+        zone=zone,
+        datacenter=datacenter,
+        bridge_domain=bridge_domain,
+        epg=epg,
+    )
+
+    if not vlans:
+        click.echo("No matching VLANs found.")
+    else:
+        for vlan in vlans:
+            click.echo(vlan)
+
+
 @cli.command()
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
 @click.option("--output", "-o", default="docs", help="Output directory for markdown files")
@@ -374,6 +411,24 @@ def generate_markdown(path, output):
 
     generate_markdown_report(networks, output)
     click.echo(f"Markdown reports generated in {output}")
+
+
+@cli.command()
+@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
+@click.option("--output", "-o", required=True, help="Path to output migrated layout (REQUIRED)")
+def migrate(path, output):
+    """Migrate flat network database to relational layout"""
+    from .migrate import run_migration
+
+    try:
+        run_migration(path, output)
+        click.echo(f"Successfully migrated database from '{path}' to relational layout at '{output}'")
+    except ValueError as e:
+        click.echo(f"Migration Error: {e}")
+        exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected migration error: {e}")
+        exit(1)
 
 
 def main():
