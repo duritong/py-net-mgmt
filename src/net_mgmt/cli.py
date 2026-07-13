@@ -397,8 +397,9 @@ def get_vlans(environment, zone, datacenter, bridge_domain, epg, path):
 
 @cli.command()
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-@click.option("--output", "-o", default="docs", help="Output directory for markdown files")
-def generate_markdown(path, output):
+@click.option("--output", "-o", default="generated-docs", help="Output directory for markdown files")
+@click.option("--templates", "-t", default=None, help="Directory containing custom Jinja2 template overrides")
+def generate_markdown(path, output, templates):
     """Generate markdown overview in an output directory"""
     from .reports import generate_markdown_report
 
@@ -409,7 +410,7 @@ def generate_markdown(path, output):
         click.echo(f"Validation Error: {e}")
         exit(1)
 
-    generate_markdown_report(networks, output)
+    generate_markdown_report(networks, output, templates_dir=templates)
     click.echo(f"Markdown reports generated in {output}")
 
 

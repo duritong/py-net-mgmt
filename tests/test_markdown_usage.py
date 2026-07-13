@@ -29,9 +29,9 @@ class TestMarkdownReport(unittest.TestCase):
             readme_content = f.read()
 
         self.assertIn("| Context |", readme_content)
-        self.assertIn("[test_net](test_net.md) | 192.168.100.0/24 | default |", readme_content)
+        self.assertIn("[test_net](networks/test_net.md) | `192.168.100.0/24` | `default` |", readme_content)
 
-        net_path = os.path.join(self.output_dir, "test_net.md")
+        net_path = os.path.join(self.output_dir, "networks", "test_net.md")
         self.assertTrue(os.path.exists(net_path))
 
         with open(net_path, "r") as f:
@@ -83,12 +83,12 @@ class TestMarkdownReport(unittest.TestCase):
         # 4. net4: DC1, zoneB, unassigned, epgA
         # 5. net1: DC2, zoneB, unassigned, epgA
         # 6. net5: None, zoneA, unassigned, epgA (None DC sorts last)
-        pos6 = readme_content.find("[net6](net6.md)")
-        pos3 = readme_content.find("[net3](net3.md)")
-        pos2 = readme_content.find("[net2](net2.md)")
-        pos4 = readme_content.find("[net4](net4.md)")
-        pos1 = readme_content.find("[net1](net1.md)")
-        pos5 = readme_content.find("[net5](net5.md)")
+        pos6 = readme_content.find("[net6](networks/net6.md)")
+        pos3 = readme_content.find("[net3](networks/net3.md)")
+        pos2 = readme_content.find("[net2](networks/net2.md)")
+        pos4 = readme_content.find("[net4](networks/net4.md)")
+        pos1 = readme_content.find("[net1](networks/net1.md)")
+        pos5 = readme_content.find("[net5](networks/net5.md)")
 
         self.assertNotEqual(pos6, -1)
         self.assertNotEqual(pos3, -1)
@@ -102,6 +102,24 @@ class TestMarkdownReport(unittest.TestCase):
         self.assertLess(pos3, pos4)
         self.assertLess(pos4, pos1)
         self.assertLess(pos1, pos5)
+
+    def test_custom_templates(self):
+        templates_dir = os.path.join(self.test_dir, "my_templates")
+        os.makedirs(templates_dir)
+
+        with open(os.path.join(templates_dir, "index.md"), "w", encoding="utf-8") as f:
+            f.write("# Custom Index\nTotal: {{ tree | length }}")
+
+        net = Network(name="test_net", cidr="192.168.100.0/24")
+        generate_markdown_report([net], self.output_dir, templates_dir=templates_dir)
+
+        readme_path = os.path.join(self.output_dir, "README.md")
+        self.assertTrue(os.path.exists(readme_path))
+
+        with open(readme_path, "r", encoding="utf-8") as f:
+            readme_content = f.read()
+
+        self.assertEqual(readme_content, "# Custom Index\nTotal: 0")
 
 
 if __name__ == "__main__":

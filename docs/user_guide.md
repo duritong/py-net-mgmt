@@ -42,13 +42,28 @@ net-mgmt get-vlans --environment dev --zone Trusted
 ---
 
 ### Command: `generate-markdown`
-Renders the complete networks database into an output directory:
-- Generates a central `README.md` containing a structured, segmented folder-style overview (H2-H5 headings) representing your topological hierarchy with flat tables.
-- Generates individual, standalone detailed markdown files for each network (e.g. `backend_net.md`), complete with settings, active allocations, and free intervals.
+Renders the complete networks database into an output directory using decoupled, pluggable Jinja2 templates:
+- Generates a central `README.md` index file containing a sleek, hierarchical nested bullet list representing your network topology.
+- Generates dedicated relational subfolders (`datacenters/`, `zones/`, `environments/`, `bridge_domains/`, `epgs/`, and `networks/`) containing highly navigated cross-linked detail pages for every logical and physical entity.
+- Fully supports custom HTML/Markdown Jinja2 template overrides.
+
 ```bash
-# Render documentation inside /docs directory
-net-mgmt generate-markdown --output docs
+# Render relational documentation inside /generated-docs directory using default templates
+net-mgmt generate-markdown --output generated-docs
+
+# Render documentation with a custom template overrides directory
+net-mgmt generate-markdown --output generated-docs --templates my_templates/
 ```
+
+#### Custom Template Overrides
+The report engine looks for specific file names inside your templates directory and automatically falls back to standard defaults for any omitted ones:
+- `index.md`: Renders the index `README.md` page (receives `tree` dict of nested subnets and `unassigned_networks` list).
+- `datacenter.md`: Renders `datacenters/<dc_name>.md` pages (receives `name`, `properties`, and list of associated `networks`).
+- `zone.md`: Renders `zones/<zone_name>.md` pages (receives `name`, `properties`, and list of associated `networks`).
+- `environment.md`: Renders `environments/<env_name>.md` pages (receives `name`, `properties`, and list of associated `networks`).
+- `bridge_domain.md`: Renders `bridge_domains/<bd_name>.md` pages (receives `name`, `properties`, and list of associated `networks`).
+- `epg.md`: Renders `epgs/<epg_name>.md` pages (receives `name`, `properties`, and list of associated `networks`).
+- `network.md`: Renders `networks/<net_name>.md` pages (receives `network` object).
 
 ---
 
