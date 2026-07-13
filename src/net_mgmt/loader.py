@@ -598,7 +598,10 @@ def save_network_to_file(network: Network):
                             alloc_data["comment"] = alloc.comment
                     elif alloc.cidr:
                         alloc_data["cidr"] = alloc.cidr
-                        alloc_data["comment"] = alloc.comment
+                        if alloc.hostname:
+                            alloc_data["hostname"] = alloc.hostname
+                        if alloc.comment:
+                            alloc_data["comment"] = alloc.comment
                     data["allocations"].append(alloc_data)
 
             # Now write the data back, truncating the file
