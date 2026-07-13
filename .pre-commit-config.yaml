@@ -5,3 +5,12 @@ repos:
       - id: ruff
         args: [ --fix ]
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: generate-docs
+        name: Auto-generate network documentation
+        entry: bash -c "PYTHONPATH=src python -m net_mgmt.cli generate-markdown --output generated-docs && git add generated-docs/"
+        language: system
+        files: ^networks/
+        pass_filenames: false
