@@ -1,6 +1,6 @@
 import unittest
 
-from src.net_mgmt.core import Allocation, Network, Reservation, validate_network_list
+from src.net_mgmt.core import Allocation, Network, Reservation, StaticRoute, validate_network_list
 
 
 class TestOrdering(unittest.TestCase):
@@ -217,6 +217,50 @@ class TestNetworkValidation(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             validate_network_list(nets)
+
+    def test_to_dict_properties(self):
+        # 1. Allocation
+        alloc = Allocation(ip="10.0.1.10", hostname="host1", comment="Test Alloc")
+        alloc_dict = alloc.to_dict
+        self.assertEqual(alloc_dict["ip"], "10.0.1.10")
+        self.assertEqual(alloc_dict["hostname"], "host1")
+        self.assertEqual(alloc_dict["comment"], "Test Alloc")
+
+        # 2. Reservation
+        res = Reservation(id="pool1", cidr="10.0.1.10-10.0.1.20", comment="Test Pool", allocatable=True)
+        res_dict = res.to_dict
+        self.assertEqual(res_dict["id"], "pool1")
+        self.assertEqual(res_dict["cidr"], "10.0.1.10-10.0.1.20")
+        self.assertEqual(res_dict["comment"], "Test Pool")
+        self.assertTrue(res_dict["allocatable"])
+
+        # 3. StaticRoute
+        sr = StaticRoute(cidr="172.16.0.0/16", gateway="10.0.1.1")
+        sr_dict = sr.to_dict
+        self.assertEqual(sr_dict["cidr"], "172.16.0.0/16")
+        self.assertEqual(sr_dict["gateway"], "10.0.1.1")
+
+        # 4. Network
+        net = Network(
+            name="test_net",
+            cidr="10.0.1.0/24",
+            vlan=30,
+            static_routes=[sr],
+            reservations=[res],
+            allocations=[alloc],
+            description="My Network",
+        )
+        net_dict = net.to_dict
+        self.assertEqual(net_dict["name"], "test_net")
+        self.assertEqual(net_dict["cidr"], "10.0.1.0/24")
+        self.assertEqual(net_dict["vlan"], 30)
+        self.assertEqual(net_dict["description"], "My Network")
+        self.assertEqual(len(net_dict["static_routes"]), 1)
+        self.assertEqual(net_dict["static_routes"][0]["cidr"], "172.16.0.0/16")
+        self.assertEqual(len(net_dict["reservations"]), 1)
+        self.assertEqual(net_dict["reservations"][0]["id"], "pool1")
+        self.assertEqual(len(net_dict["allocations"]), 1)
+        self.assertEqual(net_dict["allocations"][0]["ip"], "10.0.1.10")
 
 
 if __name__ == "__main__":

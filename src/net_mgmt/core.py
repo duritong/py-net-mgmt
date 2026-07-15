@@ -47,6 +47,24 @@ class Allocation:
     def networks(self) -> List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]:
         return self._networks
 
+    @property
+    def to_dict(self) -> dict:
+        """Convert Allocation to a dictionary representation."""
+        res = {}
+        if self.ip:
+            res["ip"] = str(self.ip)
+            if self.hostname:
+                res["hostname"] = self.hostname
+            if self.comment:
+                res["comment"] = self.comment
+        elif self.cidr:
+            res["cidr"] = self.cidr
+            if self.hostname:
+                res["hostname"] = self.hostname
+            if self.comment:
+                res["comment"] = self.comment
+        return res
+
 
 @dataclass
 class Reservation:
@@ -118,11 +136,31 @@ class Reservation:
             for ip in net:
                 yield ip
 
+    @property
+    def to_dict(self) -> dict:
+        """Convert Reservation to a dictionary representation."""
+        res = {
+            "id": self.id,
+            "cidr": self.cidr,
+            "comment": self.comment,
+        }
+        if self.allocatable:
+            res["allocatable"] = True
+        return res
+
 
 @dataclass
 class StaticRoute:
     cidr: str
     gateway: Optional[str] = None
+
+    @property
+    def to_dict(self) -> dict:
+        """Convert StaticRoute to a dictionary representation."""
+        return {
+            "cidr": self.cidr,
+            "gateway": self.gateway,
+        }
 
 
 @dataclass
@@ -629,6 +667,37 @@ class Network:
         if deleted > 0:
             self.save()
         return deleted
+
+    @property
+    def to_dict(self) -> dict:
+        """Convert Network to a dictionary representation (including nested lists)."""
+        res = {
+            "name": self.name,
+            "cidr": str(self.cidr),
+            "vlan": self.vlan,
+            "bridge_domain": self.bridge_domain,
+            "environment": self.environment,
+            "epg": self.epg,
+            "default_mtu": self.default_mtu,
+            "dns_nameservers": self.dns_nameservers,
+            "dns_search": self.dns_search,
+            "timeservers": self.timeservers,
+            "zone": self.zone,
+            "datacenter": self.datacenter,
+            "routable": self.routable,
+            "context": self.context,
+            "reserve_gateway": self.reserve_gateway,
+            "reserve_internal": self.reserve_internal,
+        }
+        if self.description:
+            res["description"] = self.description
+        if self.static_routes:
+            res["static_routes"] = [sr.to_dict for sr in self.static_routes]
+        if self.reservations:
+            res["reservations"] = [r.to_dict for r in self.reservations]
+        if self.allocations:
+            res["allocations"] = [a.to_dict for a in self.allocations]
+        return res
 
 
 def validate_network_list(networks: List[Network]):
