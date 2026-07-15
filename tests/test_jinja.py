@@ -166,6 +166,12 @@ class TestJinjaRendering(unittest.TestCase):
         template1_name = self.env.from_string("{{ ('EPG_App' | epg_by_name).name }}")
         self.assertEqual(template1_name.render(), "EPG_App")
 
+        # Test transitive delegation on EPG: zone and datacenter
+        template1_zone = self.env.from_string("{{ ('EPG_App' | epg_by_name).zone }}")
+        self.assertEqual(template1_zone.render(), "Trusted")
+        template1_dc = self.env.from_string("{{ ('EPG_App' | epg_by_name).datacenter }}")
+        self.assertEqual(template1_dc.render(), "DC_Frankfurt")
+
         # Test bridge_domain_by_name
         template2 = self.env.from_string("{{ ('BD_Prod' | bridge_domain_by_name).datacenter }}")
         self.assertEqual(template2.render(), "DC_Frankfurt")

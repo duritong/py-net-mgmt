@@ -133,64 +133,98 @@ def vlans_in_environment(value: Any, environment: Optional[str] = None) -> List[
     return core_query_vlans(networks, environment=environment)
 
 
-def epg_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
+class RelationalEntity:
+    """Wrapper class providing name injection and transitive attribute delegation."""
+
+    def __init__(self, name: str, data: dict, subdir: str):
+        self._name = name
+        self._data = data or {}
+        self._subdir = subdir
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "name":
+            return self._name
+        if key in self._data:
+            return self._data[key]
+        if key in ("zone", "datacenter"):
+            val = getattr(self, key, None)
+            if val is not None:
+                return val
+        raise KeyError(key)
+
+    def __getattr__(self, key: str) -> Any:
+        if key in self._data:
+            return self._data[key]
+        if key in ("zone", "datacenter"):
+            if self._subdir == "epgs":
+                bd_name = self._data.get("bridge_domain")
+                if bd_name:
+                    bd = bridge_domain_by_name(bd_name)
+                    if bd:
+                        return getattr(bd, key, None)
+        return None
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def copy(self) -> dict:
+        res = self._data.copy()
+        res["name"] = self._name
+        if self._subdir == "epgs":
+            res["zone"] = self.zone
+            res["datacenter"] = self.datacenter
+        return res
+
+
+def _lookup_entity(subdir: str, name: str) -> Optional[RelationalEntity]:
+    """Helper to lookup relational entity metadata and wrap as RelationalEntity."""
+    entities = get_cached_entities(subdir)
+    data = entities.get(name)
+    if data is not None:
+        return RelationalEntity(name, data, subdir)
+    return None
+
+
+def epg_by_name(value: Any, name: Optional[str] = None) -> Optional[RelationalEntity]:
     """Find EPG properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    epgs = get_cached_entities("epgs")
-    res = epgs.get(name)
-    if res is not None:
-        res = res.copy()
-        res["name"] = name
-    return res
+    return _lookup_entity("epgs", name)
 
 
-def bridge_domain_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
+def bridge_domain_by_name(value: Any, name: Optional[str] = None) -> Optional[RelationalEntity]:
     """Find Bridge Domain properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    bds = get_cached_entities("bridge_domains")
-    res = bds.get(name)
-    if res is not None:
-        res = res.copy()
-        res["name"] = name
-    return res
+    return _lookup_entity("bridge_domains", name)
 
 
-def environment_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
+def environment_by_name(value: Any, name: Optional[str] = None) -> Optional[RelationalEntity]:
     """Find Environment properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    envs = get_cached_entities("environments")
-    res = envs.get(name)
-    if res is not None:
-        res = res.copy()
-        res["name"] = name
-    return res
+    return _lookup_entity("environments", name)
 
 
-def zone_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
+def zone_by_name(value: Any, name: Optional[str] = None) -> Optional[RelationalEntity]:
     """Find Zone properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    zones = get_cached_entities("zones")
-    res = zones.get(name)
-    if res is not None:
-        res = res.copy()
-        res["name"] = name
-    return res
+    return _lookup_entity("zones", name)
 
 
-def datacenter_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
+def datacenter_by_name(value: Any, name: Optional[str] = None) -> Optional[RelationalEntity]:
     """Find Datacenter properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    dcs = get_cached_entities("datacenters")
-    res = dcs.get(name)
-    if res is not None:
-        res = res.copy()
-        res["name"] = name
-    return res
+    return _lookup_entity("datacenters", name)
 
 
 def register_filters(env):
