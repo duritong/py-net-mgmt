@@ -433,8 +433,12 @@ class Network:
         # Check for overlapping reservations
         for i in range(len(eff_reservations)):
             for j in range(i + 1, len(eff_reservations)):
-                # Skip checking system reservations against themselves if they are designed to not overlap
-                # But here we just check everything against everything
+                id_i = eff_reservations[i].id
+                id_j = eff_reservations[j].id
+                # System reservations are allowed to overlap with other reservations
+                if id_i.startswith("sys-") or id_j.startswith("sys-"):
+                    continue
+
                 if eff_reservations[i].overlaps(eff_reservations[j]):
                     raise ValueError(
                         f"Reservation '{eff_reservations[i].id}' ({eff_reservations[i].cidr}) "
@@ -455,6 +459,16 @@ class Network:
                         break
                 if not found_res:
                     raise ValueError(f"Allocation {alloc.cidr or alloc.ip} is not within any allocatable reservation")
+
+                # Must not overlap with any non-allocatable reservation
+                for res in eff_reservations:
+                    if not res.allocatable:
+                        for res_net in res.networks:
+                            if alloc_net.overlaps(res_net):
+                                raise ValueError(
+                                    f"Allocation {alloc.cidr or alloc.ip} overlaps with non-allocatable "
+                                    f"reservation '{res.id}' ({res.cidr})"
+                                )
 
             # Check for Duplicate Allocations (overlap check)
             # Compare this alloc against all other allocs
@@ -496,7 +510,10 @@ class Network:
         for res in target_reservations:
             for ip in res.iter_ips():
                 if ip not in allocated_ips:
-                    return ip
+                    # Skip if the IP falls within any non-allocatable reservation
+                    is_reserved = any(not r.allocatable and r.contains_ip(ip) for r in eff_reservations)
+                    if not is_reserved:
+                        return ip
 
         raise ValueError("No free IPs available")
 

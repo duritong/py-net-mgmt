@@ -173,3 +173,34 @@ Retrieves all VLANs defined in a specific environment:
 ```jinja
 {{ 'production' | vlans_in_environment }}
 ```
+
+#### Filter: `query_allocations`
+Queries allocations inside a network by matching hostnames, IPs, or comments:
+```jinja
+{# Get all allocations inside a network containing the text 'db' #}
+{% set db_servers = network | query_allocations('db') %}
+{% for server in db_servers %}
+IP: {{ server.ip }} | Host: {{ server.hostname }}
+{% endfor %}
+```
+
+#### Filter: `find_or_allocate_hostname`
+Finds or automatically allocates a single IP address by hostname:
+```jinja
+{# Find or allocate an IP for database node in backend_net #}
+{% set network = 'backend_net' | network_by_name %}
+{% set db_alloc = network | find_or_allocate_hostname('prod-db-01.internal') %}
+Database IP: {{ db_alloc.ip }}
+```
+
+#### Filter: `find_or_allocate_range`
+Finds or automatically allocates a contiguous range of IPs:
+```jinja
+{# Find or allocate a contiguous block of 3 IPs for a MetalLB service pool #}
+{% set network = 'backend_net' | network_by_name %}
+{% set lb_ips = network | find_or_allocate_range('MetalLB LoadBalancer Pool', 3) %}
+LoadBalancer IPs:
+{% for alloc in lb_ips %}
+- {{ alloc.ip }}
+{% endfor %}
+```

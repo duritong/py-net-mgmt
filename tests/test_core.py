@@ -91,9 +91,23 @@ class TestNetwork(unittest.TestCase):
             self.net.get_next_free_ip()
 
     def test_system_reservations_blocking(self):
-        # Try to create an allocatable reservation that overlaps with gateway (should fail)
-        with self.assertRaisesRegex(ValueError, "overlaps"):
-            self.net.add_reservation(id="bad_pool", cidr="10.0.0.0/24", comment="Bad", allocatable=True)
+        # Creating a pool that overlaps with system reservations is now allowed!
+        # It acts as an exclude-rule, so system IPs are skipped automatically.
+        self.net.add_reservation(id="large_pool", cidr="10.0.0.0/24", comment="Large Pool", allocatable=True)
+
+        # Free IP should skip .0, .1, and .2-.5, returning .6!
+        ip = self.net.get_next_free_ip()
+        self.assertEqual(str(ip), "10.0.0.6")
+
+    def test_subnet_broadcast_no_conflict(self):
+        # In a 10.0.0.0/22 network, 10.0.3.0/24 includes the broadcast 10.0.3.255.
+        # This is now fully allowed without overlaps error!
+        net = Network(name="slash-22", cidr="10.0.0.0/22")
+        net.add_reservation(id="pool_24", cidr="10.0.3.0/24", comment="Pool 24", allocatable=True)
+
+        # Allocating should work and skip the broadcast address (which is 10.0.3.255)
+        ip = net.get_next_free_ip()
+        self.assertEqual(str(ip), "10.0.3.0")
 
     def test_disable_system_reservations(self):
         net = Network(name="test", cidr="10.0.0.0/24", reserve_gateway=False, reserve_internal=False)
