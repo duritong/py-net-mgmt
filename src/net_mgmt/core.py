@@ -505,7 +505,11 @@ class Network:
             if not target_reservations:
                 raise ValueError("No allocatable reservations found")
 
-        allocated_ips = {a.ip for a in self.allocations}
+        allocated_ips = set()
+        for alloc in self.allocations:
+            for net in alloc.networks:
+                for ip in net:
+                    allocated_ips.add(ip)
 
         for res in target_reservations:
             for ip in res.iter_ips():

@@ -84,6 +84,23 @@ class TestFindOrAllocate(unittest.TestCase):
         count = self.network.delete_allocations(hostname="notfound")
         self.assertEqual(count, 0)
 
+    def test_find_or_allocate_with_existing_cidr_allocation(self):
+        # Create a network 10.0.0.0/22 (like the user's setup)
+        from src.net_mgmt.core import Allocation
+
+        net = Network(name="net1", cidr="10.0.0.0/22")
+        net.add_reservation(id="hosts", cidr="10.0.3.0/24", comment="hosts", allocatable=True)
+
+        # Pre-allocate 10.0.3.0 as a CIDR/range allocation
+        net.allocations.append(Allocation(cidr="10.0.3.0", comment="foo"))
+
+        # Now find_or_allocate_hostname on hosts pool
+        alloc = net.find_or_allocate_hostname("other-host", "hosts")
+
+        # It should correctly skip 10.0.3.0 (which is allocated under cidr) and allocate 10.0.3.1!
+        self.assertEqual(str(alloc.ip), "10.0.3.1")
+        self.assertEqual(alloc.hostname, "other-host")
+
 
 if __name__ == "__main__":
     unittest.main()
