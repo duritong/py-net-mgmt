@@ -238,9 +238,14 @@ These filters allow you to retrieve the full, normalized dictionary properties f
 {% set epg = 'EPG_App' | epg_by_name %}
 EPG VLAN: {{ epg.vlan }}
 EPG Bridge Domain: {{ epg.bridge_domain }}
+EPG Environment Name: {{ epg.environment }}
 
-{# Retrieve Bridge Domain metadata #}
+{# Retrieve Bridge Domain metadata (resolving transitively) #}
 {% set bd = epg.bridge_domain | bridge_domain_by_name %}
 BD Datacenter: {{ bd.datacenter }}
 BD Zone: {{ bd.zone }}
+
+{# Retrieve Environment metadata (resolving transitively) #}
+{% set env = epg.environment | environment_by_name %}
+Env Timeservers: {{ env.timeservers | join(', ') }}
 ```
