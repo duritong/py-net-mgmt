@@ -543,6 +543,10 @@ class Network:
 
             save_network_to_file(self)
 
+            from .db import clear_db_cache
+
+            clear_db_cache()
+
     def add_allocation(self, allocation: Allocation):
         self.allocations.append(allocation)
         self.validate()

@@ -4,7 +4,7 @@ from typing import List, Optional
 import jinja2
 
 from .core import Network
-from .loader import load_yaml_files_from_subdir
+from .db import get_cached_entities, set_db_path
 
 DEFAULT_TEMPLATES = {
     "index.md": (
@@ -231,12 +231,13 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
     for subdir in subdirs:
         os.makedirs(os.path.join(output_dir, subdir), exist_ok=True)
 
-    # 4. Load raw metadata files to render complete list of entities
-    datacenters = load_yaml_files_from_subdir(db_dir, "datacenters")
-    zones = load_yaml_files_from_subdir(db_dir, "zones")
-    environments = load_yaml_files_from_subdir(db_dir, "environments")
-    bridge_domains = load_yaml_files_from_subdir(db_dir, "bridge_domains")
-    epgs = load_yaml_files_from_subdir(db_dir, "epgs")
+    # 4. Load raw metadata files to render complete list of entities (highly optimized via cache)
+    set_db_path(db_dir)
+    datacenters = get_cached_entities("datacenters")
+    zones = get_cached_entities("zones")
+    environments = get_cached_entities("environments")
+    bridge_domains = get_cached_entities("bridge_domains")
+    epgs = get_cached_entities("epgs")
 
     # Group networks by entity associations
     dc_networks = {}

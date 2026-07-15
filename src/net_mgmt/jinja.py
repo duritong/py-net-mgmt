@@ -1,8 +1,7 @@
 from typing import Any, List, Optional
 
 from .core import Allocation, Network
-from .db import get_database, get_db_path
-from .loader import load_yaml_files_from_subdir
+from .db import get_cached_entities, get_database
 
 
 def _ensure_networks(value: Any) -> List[Network]:
@@ -135,47 +134,42 @@ def vlans_in_environment(value: Any, environment: Optional[str] = None) -> List[
 
 
 def epg_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
-    """Find EPG properties by name. Usage: 'EPG_App' | epg_by_name"""
+    """Find EPG properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    db_path = get_db_path()
-    epgs = load_yaml_files_from_subdir(db_path, "epgs")
+    epgs = get_cached_entities("epgs")
     return epgs.get(name)
 
 
 def bridge_domain_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
-    """Find Bridge Domain properties by name. Usage: 'BD_Prod' | bridge_domain_by_name"""
+    """Find Bridge Domain properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    db_path = get_db_path()
-    bds = load_yaml_files_from_subdir(db_path, "bridge_domains")
+    bds = get_cached_entities("bridge_domains")
     return bds.get(name)
 
 
 def environment_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
-    """Find Environment properties by name. Usage: 'production' | environment_by_name"""
+    """Find Environment properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    db_path = get_db_path()
-    envs = load_yaml_files_from_subdir(db_path, "environments")
+    envs = get_cached_entities("environments")
     return envs.get(name)
 
 
 def zone_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
-    """Find Zone properties by name. Usage: 'Trusted' | zone_by_name"""
+    """Find Zone properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    db_path = get_db_path()
-    zones = load_yaml_files_from_subdir(db_path, "zones")
+    zones = get_cached_entities("zones")
     return zones.get(name)
 
 
 def datacenter_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
-    """Find Datacenter properties by name. Usage: 'DC_Frankfurt' | datacenter_by_name"""
+    """Find Datacenter properties by name (Highly Optimized via In-Memory Cache)."""
     if name is None:
         name = value
-    db_path = get_db_path()
-    dcs = load_yaml_files_from_subdir(db_path, "datacenters")
+    dcs = get_cached_entities("datacenters")
     return dcs.get(name)
 
 
