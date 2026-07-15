@@ -204,7 +204,9 @@ class Network:
 
             gw_ip = ipaddress.ip_address(sr.gateway)
             if gw_ip not in self.cidr:
-                raise ValueError(f"Static route gateway {sr.gateway} is not within network {self.cidr}")
+                raise ValueError(
+                    f"{self._error_prefix}Static route gateway {sr.gateway} is not within network {self.cidr}"
+                )
 
             parsed_routes.append(sr)
         self.static_routes = parsed_routes
@@ -284,6 +286,11 @@ class Network:
     def gateway(self) -> str:
         """Calculate and return the default gateway of the network (first usable IP)."""
         return str(self.cidr.network_address + 1)
+
+    @property
+    def _error_prefix(self) -> str:
+        """Construct a contextual prefix for validation error messages."""
+        return f"In Network '{self.name}' (EPG: '{self.epg or 'None'}', BD: '{self.bridge_domain or 'None'}'): "
 
     @property
     def effective_reservations(self) -> List[Reservation]:
@@ -427,6 +434,7 @@ class Network:
             for res_net in reservation.networks:
                 if not res_net.subnet_of(self.cidr):
                     raise ValueError(
+                        f"{self._error_prefix}"
                         f"Reservation {reservation.cidr} (part {res_net}) is not within network CIDR {self.cidr}"
                     )
 
@@ -441,6 +449,7 @@ class Network:
 
                 if eff_reservations[i].overlaps(eff_reservations[j]):
                     raise ValueError(
+                        f"{self._error_prefix}"
                         f"Reservation '{eff_reservations[i].id}' ({eff_reservations[i].cidr}) "
                         f"overlaps with '{eff_reservations[j].id}' ({eff_reservations[j].cidr})"
                     )
@@ -449,7 +458,9 @@ class Network:
         for alloc in self.allocations:
             for alloc_net in alloc.networks:
                 if not alloc_net.subnet_of(self.cidr):
-                    raise ValueError(f"Allocation {alloc_net} is not within network CIDR {self.cidr}")
+                    raise ValueError(
+                        f"{self._error_prefix}Allocation {alloc_net} is not within network CIDR {self.cidr}"
+                    )
 
                 # Must be in an allocatable reservation
                 found_res = False
@@ -458,7 +469,10 @@ class Network:
                         found_res = True
                         break
                 if not found_res:
-                    raise ValueError(f"Allocation {alloc.cidr or alloc.ip} is not within any allocatable reservation")
+                    raise ValueError(
+                        f"{self._error_prefix}"
+                        f"Allocation {alloc.cidr or alloc.ip} is not within any allocatable reservation"
+                    )
 
                 # Must not overlap with any non-allocatable reservation
                 for res in eff_reservations:
@@ -466,6 +480,7 @@ class Network:
                         for res_net in res.networks:
                             if alloc_net.overlaps(res_net):
                                 raise ValueError(
+                                    f"{self._error_prefix}"
                                     f"Allocation {alloc.cidr or alloc.ip} overlaps with non-allocatable "
                                     f"reservation '{res.id}' ({res.cidr})"
                                 )
@@ -479,6 +494,7 @@ class Network:
                     for net2 in other_alloc.networks:
                         if net1.overlaps(net2):
                             raise ValueError(
+                                f"{self._error_prefix}"
                                 f"Allocation {alloc.cidr or alloc.ip} overlaps with "
                                 f"{other_alloc.cidr or other_alloc.ip}"
                             )
@@ -738,7 +754,11 @@ def validate_network_list(networks: List[Network]):
                 net2 = sorted_networks[j]
                 if net1.cidr.overlaps(net2.cidr):
                     raise ValueError(
-                        f"Network '{net1.name}' ({net1.cidr}) overlaps with '{net2.name}' ({net2.cidr}) in {group_name}"
+                        f"Network '{net1.name}' ({net1.cidr}, "
+                        f"EPG: '{net1.epg or 'None'}', BD: '{net1.bridge_domain or 'None'}') "
+                        f"overlaps with '{net2.name}' ({net2.cidr}, "
+                        f"EPG: '{net2.epg or 'None'}', BD: '{net2.bridge_domain or 'None'}') "
+                        f"in {group_name}"
                     )
 
     # Check for overlapping CIDRs between routable networks (they effectively share a global context)
