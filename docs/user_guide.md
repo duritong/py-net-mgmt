@@ -204,3 +204,43 @@ LoadBalancer IPs:
 - {{ alloc.ip }}
 {% endfor %}
 ```
+
+#### Filter: `networks_in_epg`
+Retrieves all subnets/networks associated with a specific EPG name:
+```jinja
+{# Get all networks belonging to EPG_App #}
+{% set app_subnets = 'EPG_App' | networks_in_epg %}
+{% for net in app_subnets %}
+- {{ net.name }} ({{ net.cidr }})
+{% endfor %}
+```
+
+#### Filter: `networks_in_bridge_domain`
+Retrieves all subnets/networks associated with a specific Bridge Domain name:
+```jinja
+{# Get all networks belonging to BD_Prod #}
+{% set prod_subnets = 'BD_Prod' | networks_in_bridge_domain %}
+{% for net in prod_subnets %}
+- {{ net.name }} ({{ net.cidr }})
+{% endfor %}
+```
+
+#### Relational Metadata Lookups: `*_by_name`
+These filters allow you to retrieve the full, normalized dictionary properties for any physical or logical database entity directly from templates:
+- `epg_by_name`: Looks up EPG metadata (e.g. `vlan`, `bridge_domain`, `environment`).
+- `bridge_domain_by_name`: Looks up Bridge Domain metadata (e.g. `datacenter`, `zone`).
+- `environment_by_name`: Looks up Environment variables.
+- `zone_by_name`: Looks up Zone parameters.
+- `datacenter_by_name`: Looks up Datacenter variables (e.g. `timeservers`, `dns_search`).
+
+```jinja
+{# Retrieve EPG metadata #}
+{% set epg = 'EPG_App' | epg_by_name %}
+EPG VLAN: {{ epg.vlan }}
+EPG Bridge Domain: {{ epg.bridge_domain }}
+
+{# Retrieve Bridge Domain metadata #}
+{% set bd = epg.bridge_domain | bridge_domain_by_name %}
+BD Datacenter: {{ bd.datacenter }}
+BD Zone: {{ bd.zone }}
+```

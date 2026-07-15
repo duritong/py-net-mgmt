@@ -15,6 +15,11 @@ def set_db_path(path: str):
         _DB_CACHE = None  # Invalidate cache when path changes
 
 
+def get_db_path() -> str:
+    global _DB_PATH
+    return _DB_PATH
+
+
 def get_database(force_reload: bool = False) -> List[Network]:
     global _DB_CACHE
     if _DB_CACHE is None or force_reload:

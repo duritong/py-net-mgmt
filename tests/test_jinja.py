@@ -148,6 +148,26 @@ class TestJinjaRendering(unittest.TestCase):
         template = self.env.from_string("{{ 'prod' | vlans_in_environment | join(',') }}")
         self.assertEqual(template.render(), "10,20")
 
+    @patch("src.net_mgmt.jinja.load_yaml_files_from_subdir")
+    def test_relational_entity_lookup_filters(self, mock_load):
+        # Setup mock data for epgs, bridge_domains, environments, zones, and datacenters
+        def mock_load_subdir(db_path, subdir):
+            if subdir == "epgs":
+                return {"EPG_App": {"vlan": 30, "bridge_domain": "BD_Prod"}}
+            if subdir == "bridge_domains":
+                return {"BD_Prod": {"datacenter": "DC_Frankfurt", "zone": "Trusted"}}
+            return {}
+
+        mock_load.side_effect = mock_load_subdir
+
+        # Test epg_by_name
+        template1 = self.env.from_string("{{ ('EPG_App' | epg_by_name).vlan }}")
+        self.assertEqual(template1.render(), "30")
+
+        # Test bridge_domain_by_name
+        template2 = self.env.from_string("{{ ('BD_Prod' | bridge_domain_by_name).datacenter }}")
+        self.assertEqual(template2.render(), "DC_Frankfurt")
+
 
 if __name__ == "__main__":
     unittest.main()
