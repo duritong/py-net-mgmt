@@ -116,6 +116,27 @@ vlan_ids = query_vlans(
 print(f"Matched VLANs: {vlan_ids}")
 ```
 
+### Native Dictionary Serialization (`to_dict`)
+Every core model (`Allocation`, `Reservation`, `StaticRoute`, and `Network`) features a native, boilerplate-free `@property def to_dict(self) -> dict`. This property is universally accessible in both Python automation scripts and custom Jinja2 templates:
+
+```python
+# Convert a Network and all of its recursively nested lists to a Python dictionary
+net_dict = net.to_dict
+
+print(net_dict["name"])             # "backend_net"
+print(net_dict["cidr"])             # "10.0.1.0/24"
+print(net_dict["static_routes"])    # [{"cidr": "172.16.0.0/16", "gateway": "10.0.1.1"}]
+```
+
+#### Zero-Boilerplate Jinja2 Usage:
+```jinja
+{# Translate static route objects into a JSON array in your template #}
+{{ network.static_routes | map(attribute='to_dict') | list | tojson }}
+
+{# Convert an entire network to a JSON dict representation #}
+{{ network.to_dict | tojson }}
+```
+
 ---
 
 ## 3. Jinja2 Filters Integration
