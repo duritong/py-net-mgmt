@@ -163,10 +163,14 @@ class TestJinjaRendering(unittest.TestCase):
         # Test epg_by_name
         template1 = self.env.from_string("{{ ('EPG_App' | epg_by_name).vlan }}")
         self.assertEqual(template1.render(), "30")
+        template1_name = self.env.from_string("{{ ('EPG_App' | epg_by_name).name }}")
+        self.assertEqual(template1_name.render(), "EPG_App")
 
         # Test bridge_domain_by_name
         template2 = self.env.from_string("{{ ('BD_Prod' | bridge_domain_by_name).datacenter }}")
         self.assertEqual(template2.render(), "DC_Frankfurt")
+        template2_name = self.env.from_string("{{ ('BD_Prod' | bridge_domain_by_name).name }}")
+        self.assertEqual(template2_name.render(), "BD_Prod")
 
 
 if __name__ == "__main__":

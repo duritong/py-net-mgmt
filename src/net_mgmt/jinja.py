@@ -138,7 +138,11 @@ def epg_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
     if name is None:
         name = value
     epgs = get_cached_entities("epgs")
-    return epgs.get(name)
+    res = epgs.get(name)
+    if res is not None:
+        res = res.copy()
+        res["name"] = name
+    return res
 
 
 def bridge_domain_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
@@ -146,7 +150,11 @@ def bridge_domain_by_name(value: Any, name: Optional[str] = None) -> Optional[di
     if name is None:
         name = value
     bds = get_cached_entities("bridge_domains")
-    return bds.get(name)
+    res = bds.get(name)
+    if res is not None:
+        res = res.copy()
+        res["name"] = name
+    return res
 
 
 def environment_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
@@ -154,7 +162,11 @@ def environment_by_name(value: Any, name: Optional[str] = None) -> Optional[dict
     if name is None:
         name = value
     envs = get_cached_entities("environments")
-    return envs.get(name)
+    res = envs.get(name)
+    if res is not None:
+        res = res.copy()
+        res["name"] = name
+    return res
 
 
 def zone_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
@@ -162,7 +174,11 @@ def zone_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
     if name is None:
         name = value
     zones = get_cached_entities("zones")
-    return zones.get(name)
+    res = zones.get(name)
+    if res is not None:
+        res = res.copy()
+        res["name"] = name
+    return res
 
 
 def datacenter_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]:
@@ -170,7 +186,11 @@ def datacenter_by_name(value: Any, name: Optional[str] = None) -> Optional[dict]
     if name is None:
         name = value
     dcs = get_cached_entities("datacenters")
-    return dcs.get(name)
+    res = dcs.get(name)
+    if res is not None:
+        res = res.copy()
+        res["name"] = name
+    return res
 
 
 def register_filters(env):
