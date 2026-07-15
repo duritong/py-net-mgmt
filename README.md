@@ -1,12 +1,12 @@
 # Net-Mgmt
 
-A Python library and Click CLI for organizing, validating, and querying declarative network definitions, reservations, and IP allocations.
+A Python library and Click CLI for organizing, validating, and querying declarative network definitions, reservations, and IP allocations using a Relational Multi-Folder Database.
 
 ## Documentation Index
 
 For comprehensive details on architecture, developer setups, and library usage, please refer to:
-- [Technical Design Overview](docs/design_overview.md) (Database patterns, network modeling options, validation constraints, and inheritance rules)
-- [User Guide & API Reference](docs/user_guide.md) (Complete CLI references, Python API examples, and Jinja2 filter integrations)
+- [Technical Design Overview](docs/design_overview.md) (Database patterns, relational directories, validation constraints, and inheritance rules)
+- [User Guide & API Reference](docs/user_guide.md) (Complete CLI references, pluggable template-driven reports, Python API examples, and Jinja2 filters)
 - [Developer Guide](docs/developer_guide.md) (Workflows for contributing, adding fields, and executing the test suite)
 
 ---
@@ -31,33 +31,35 @@ python3 -m net_mgmt.cli list
 
 ---
 
-## First-Class Network Hierarchy & Inheritance
+## Relational Multi-Folder Database
 
-The system organizes your subnets into a structured 6-tier topological hierarchy:
-`Datacenter ➔ Zone ➔ Bridge Domain ➔ Environment ➔ EPG ➔ Network`
+The repository organizes your network infrastructure into standard, normalized database subdirectories:
 
-### Dynamic Inheritance (`networks/hierarchy.yaml`)
-To avoid duplicating metadata across multiple network files, you can define a centralized topological tree in `networks/hierarchy.yaml`. Individual networks automatically inherit parent properties (such as `datacenter`, `zone`, `timeservers`, `dns_nameservers`, `default_mtu`, etc.):
-
-```yaml
-datacenters:
-  DC_Frankfurt:
-    timeservers:
-      - 10.10.10.1
-    zones:
-      Trusted:
-        dns_search:
-          - trusted.internal
-        bridge_domains:
-          BD_Prod:
-            environments:
-              production:
-                epgs:
-                  EPG_App:
-                    default_mtu: 1500
-                    networks:
-                      - backend_net  # <-- backend_net inherits all above settings!
+```text
+networks/
+├── datacenters/
+│   └── DC_Frankfurt.yaml      # Defines timeservers, dns_nameservers
+├── zones/
+│   └── Trusted.yaml           # Defines dns_search
+├── environments/
+│   └── production.yaml        # Defines timeservers, environment-wide configs
+├── bridge_domains/
+│   └── BD_Prod.yaml           # Defines: datacenter: DC_Frankfurt, zone: Trusted
+├── epgs/
+│   └── EPG_App.yaml           # Defines: bridge_domain: BD_Prod, environment: production, vlan: 30
+└── networks/
+    ├── backend_net.yaml       # Defines: cidr, epg: EPG_App (inherits vlan: 30, bd, etc.)
+    └── global-ovn-cluster.yaml# Defines: cidr (independent subnet, no EPG)
 ```
+
+### Attribute Resolution Cascade
+To keep configurations clean and DRY, common variables (like `timeservers`, `dns_nameservers`, `dns_search`, or `default_mtu`) are resolved dynamically in order of specificity:
+1. **Network** local overrides.
+2. **EPG** configuration (if linked).
+3. **Environment** configuration (if linked).
+4. **BridgeDomain** configuration (if linked).
+5. **Zone** configuration (if linked).
+6. **Datacenter** configuration (if linked).
 
 ---
 
@@ -81,34 +83,36 @@ net-mgmt get-vlans --environment production --datacenter DC_Frankfurt --zone Tru
 ```
 
 ### Validate Networks
-Checks for overlaps across globally routable networks or within the same context.
+Checks for overlaps across globally routable networks, within the same context, and enforces strict relational integrity (ForeignKey and VLAN validations).
 ```bash
 net-mgmt validate
 ```
 
-### Generate Markdown Documentation
-Generates a highly structured, folder-style overview (`README.md`) matching your network hierarchy, alongside standalone detailed markdown documentation for every network.
+### Generate Pluggable Markdown Documentation
+Generates a highly navigated relational overview matching your database schema under `generated-docs/`, driven entirely by pluggable Jinja2 templates (Option B hierarchy index tree + cross-linked entity pages).
 ```bash
-net-mgmt generate-markdown --output docs
+net-mgmt generate-markdown --output generated-docs
 ```
 
 ---
 
 ## Programmatic API Summary
 
+The Python API is completely dual-mode: if your database folder contains relational directories, it loads in **Relational Mode**. Otherwise, it falls back to legacy flat folder configurations transparently.
+
 ```python
 from net_mgmt import get_database, set_db_path
-from net_mgmt.core import query_vlans
+from net_mgmt.loader import save_network_to_file
 
 set_db_path("networks")
 networks = get_database()
 
-# Hierarchical querying of VLANs
-vlan_ids = query_vlans(
-    networks,
-    environment="production",
-    datacenter="DC_Frankfurt"
-)
+# Find a network and modify it
+net = next(n for n in networks if n.name == "backend_net")
+net.description = "Updated description"
+
+# Dry save (retains relational normalization on disk)
+save_network_to_file(net)
 ```
 
 ---

@@ -414,24 +414,6 @@ def generate_markdown(path, output, templates):
     click.echo(f"Markdown reports generated in {output}")
 
 
-@cli.command()
-@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-@click.option("--output", "-o", required=True, help="Path to output migrated layout (REQUIRED)")
-def migrate(path, output):
-    """Migrate flat network database to relational layout"""
-    from .migrate import run_migration
-
-    try:
-        run_migration(path, output)
-        click.echo(f"Successfully migrated database from '{path}' to relational layout at '{output}'")
-    except ValueError as e:
-        click.echo(f"Migration Error: {e}")
-        exit(1)
-    except Exception as e:
-        click.echo(f"Unexpected migration error: {e}")
-        exit(1)
-
-
 def main():
     cli()
 
