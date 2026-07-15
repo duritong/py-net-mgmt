@@ -281,6 +281,11 @@ class Network:
         return sys_res
 
     @property
+    def gateway(self) -> str:
+        """Calculate and return the default gateway of the network (first usable IP)."""
+        return str(self.cidr.network_address + 1)
+
+    @property
     def effective_reservations(self) -> List[Reservation]:
         return self.reservations + self._get_system_reservations()
 
@@ -674,6 +679,7 @@ class Network:
         res = {
             "name": self.name,
             "cidr": str(self.cidr),
+            "gateway": self.gateway,
             "vlan": self.vlan,
             "bridge_domain": self.bridge_domain,
             "environment": self.environment,

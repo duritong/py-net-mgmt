@@ -250,9 +250,11 @@ class TestNetworkValidation(unittest.TestCase):
             allocations=[alloc],
             description="My Network",
         )
+        self.assertEqual(net.gateway, "10.0.1.1")
         net_dict = net.to_dict
         self.assertEqual(net_dict["name"], "test_net")
         self.assertEqual(net_dict["cidr"], "10.0.1.0/24")
+        self.assertEqual(net_dict["gateway"], "10.0.1.1")
         self.assertEqual(net_dict["vlan"], 30)
         self.assertEqual(net_dict["description"], "My Network")
         self.assertEqual(len(net_dict["static_routes"]), 1)
