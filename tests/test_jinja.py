@@ -178,6 +178,22 @@ class TestJinjaRendering(unittest.TestCase):
         template2_name = self.env.from_string("{{ ('BD_Prod' | bridge_domain_by_name).name }}")
         self.assertEqual(template2_name.render(), "BD_Prod")
 
+    @patch("src.net_mgmt.jinja.get_database")
+    def test_network_containing_ip_filter(self, mock_get_db):
+        mock_get_db.return_value = self.networks
+
+        # Test implicit usage with string IP: '10.0.1.50' | network_containing_ip -> net1
+        template1 = self.env.from_string("{{ ('10.0.1.50' | network_containing_ip).name }}")
+        self.assertEqual(template1.render(), "net1")
+
+        # Test implicit usage with another string IP: '10.0.2.100' | network_containing_ip -> net2
+        template2 = self.env.from_string("{{ ('10.0.2.100' | network_containing_ip).name }}")
+        self.assertEqual(template2.render(), "net2")
+
+        # Out of range IP -> returns None
+        template3 = self.env.from_string("{{ ('192.168.1.1' | network_containing_ip) is none }}")
+        self.assertEqual(template3.render(), "True")
+
 
 if __name__ == "__main__":
     unittest.main()

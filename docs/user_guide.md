@@ -225,6 +225,17 @@ Retrieves all subnets/networks associated with a specific Bridge Domain name:
 {% endfor %}
 ```
 
+#### Filter: `network_containing_ip`
+Finds the parent `Network` object containing a given IP address (either a string IP, or an IP/CIDR object):
+```jinja
+{# 1. Find the parent network containing a standalone allocation IP #}
+{% set parent_net = alloc.ip | network_containing_ip %}
+
+{# 2. Read the prefix length #}
+Parent Prefix: {{ parent_net.cidr.prefixlen }}
+Parent Subnet: {{ parent_net.cidr }}
+```
+
 #### Relational Metadata Lookups: `*_by_name`
 These filters allow you to retrieve the full, normalized dictionary properties for any physical or logical database entity directly from templates:
 - `epg_by_name`: Looks up EPG metadata (e.g. `vlan`, `bridge_domain`, `environment`).

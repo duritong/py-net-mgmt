@@ -1,3 +1,4 @@
+import ipaddress
 from typing import Any, List, Optional
 
 from .core import Allocation, Network
@@ -227,6 +228,29 @@ def datacenter_by_name(value: Any, name: Optional[str] = None) -> Optional[Relat
     return _lookup_entity("datacenters", name)
 
 
+def network_containing_ip(value: Any, ip_str: Optional[str] = None) -> Optional[Network]:
+    """Find the Network object containing a given IP address.
+    Usage:
+        networks | network_containing_ip('10.0.1.10')
+        '10.0.1.10' | network_containing_ip
+    """
+    if ip_str is None:
+        ip_str = value
+        networks = get_database()
+    else:
+        networks = _ensure_networks(value)
+
+    try:
+        target_ip = ipaddress.ip_address(str(ip_str))
+    except ValueError:
+        return None
+
+    for net in networks:
+        if target_ip in net.cidr:
+            return net
+    return None
+
+
 def register_filters(env):
     """Register filters to a Jinja2 environment."""
     env.filters["network_by_name"] = network_by_name
@@ -242,5 +266,6 @@ def register_filters(env):
     env.filters["environment_by_name"] = environment_by_name
     env.filters["zone_by_name"] = zone_by_name
     env.filters["datacenter_by_name"] = datacenter_by_name
+    env.filters["network_containing_ip"] = network_containing_ip
     env.filters["get_networks"] = get_database  # Keep for compatibility if needed, but globals is better
     env.globals["get_networks"] = get_database
