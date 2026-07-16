@@ -25,7 +25,6 @@
 - **Reserve Internal**: `True`
 
 ## Reservations
-
 | ID | CIDR | Comment | Allocatable | Allocations | Usage |
 | --- | --- | --- | --- | --- | --- |
 | server-pool | 10.0.1.10-10.0.1.50 | Web Server Pool | True | 2 | 2/41 (4.9%) |
@@ -33,21 +32,11 @@
 | sys-broadcast | 10.0.1.255 | broadcast address | False | 0 | 0/1 (0.0%) |
 | sys-gateway | 10.0.1.1 | network internal | False | 0 | 0/1 (0.0%) |
 | sys-internal | 10.0.1.2-10.0.1.5 | network internal | False | 0 | 0/4 (0.0%) |
-
-
-
-
 ## Allocations
 | IP/CIDR | Hostname/Comment |
 | --- | --- |
 | 10.0.1.10 | web-dmz-01 |
 | 10.0.1.11 | web-dmz-02 |
-
-
-
-
-
 ## Unreserved Ranges
 - `10.0.1.6 - 10.0.1.9`
 - `10.0.1.51 - 10.0.1.255`
-

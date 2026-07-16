@@ -1,187 +1,13 @@
 import os
 from typing import List, Optional
+
 import jinja2
 
 from .core import Network
 from .db import get_cached_entities, set_db_path
 
-DEFAULT_TEMPLATES = {
-    "index.md": (
-        "# Network Overview\n\n"
-        "## 🗺️ Directory Hierarchy Tree\n\n"
-        "{% for dc, zones in tree.items() %}\n"
-        "- 🏢 **[{{ dc }}](datacenters/{{ dc }}.md)**\n"
-        "  {% for zone, bds in zones.items() %}\n"
-        "  - 📍 **[{{ zone }}](zones/{{ zone }}.md)**\n"
-        "    {% for bd, envs in bds.items() %}\n"
-        "      - 🌉 **[{{ bd }}](bridge_domains/{{ bd }}.md)**\n"
-        "        {% for env, epgs in envs.items() %}\n"
-        "          - 🌍 **[{{ env }}](environments/{{ env }}.md)**\n"
-        "            {% for epg, nets in epgs.items() %}\n"
-        "              - 🏷️ **[{{ epg }}](epgs/{{ epg }}.md)**\n"
-        "                {% for net in nets %}\n"
-        "                - 🔌 **[{{ net.name }}](networks/{{ net.name }}.md)** (`{{ net.cidr }}`)"
-        "{% if net.description %} — *{{ net.description }}*{% endif %}\n"
-        "                {% endfor %}\n"
-        "            {% endfor %}\n"
-        "        {% endfor %}\n"
-        "    {% endfor %}\n"
-        "  {% endfor %}\n"
-        "{% endfor %}\n\n"
-        "{% if unassigned_networks %}\n"
-        "---\n\n"
-        "## 📂 Unassigned Networks\n"
-        "| Name | CIDR | Context | VLAN | Description |\n"
-        "| --- | --- | --- | --- | --- |\n"
-        "{% for net in unassigned_networks -%}\n"
-        "| [{{ net.name }}](networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
-        "`{{ net.context or 'default' }}` | `{{ net.vlan or 'None' }}` | {{ net.description or '' }} |\n"
-        "{% endfor %}\n"
-        "{% endif %}\n"
-    ),
-    "datacenter.md": (
-        "# Datacenter: {{ name }}\n\n"
-        "## Properties\n"
-        "{% if properties.timeservers %}- **Timeservers**: `{{ properties.timeservers | join(', ') }}`{% endif %}\n"
-        "{% if properties.dns_nameservers %}"
-        "- **DNS Nameservers**: `{{ properties.dns_nameservers | join(', ') }}`{% endif %}\n"
-        "{% if properties.dns_search %}- **DNS Search**: `{{ properties.dns_search | join(', ') }}`{% endif %}\n"
-        "{% if properties.default_mtu %}- **Default MTU**: `{{ properties.default_mtu }}`{% endif %}\n\n"
-        "## Associated Subnets\n"
-        "| Network Name | CIDR | Context | Description |\n"
-        "| --- | --- | --- | --- |\n"
-        "{% for net in networks -%}\n"
-        "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
-        "`{{ net.context }}` | {{ net.description or '' }} |\n"
-        "{% endfor %}\n"
-    ),
-    "zone.md": (
-        "# Zone: {{ name }}\n\n"
-        "## Properties\n"
-        "{% if properties.timeservers %}- **Timeservers**: `{{ properties.timeservers | join(', ') }}`{% endif %}\n"
-        "{% if properties.dns_nameservers %}"
-        "- **DNS Nameservers**: `{{ properties.dns_nameservers | join(', ') }}`{% endif %}\n"
-        "{% if properties.dns_search %}- **DNS Search**: `{{ properties.dns_search | join(', ') }}`{% endif %}\n"
-        "{% if properties.default_mtu %}- **Default MTU**: `{{ properties.default_mtu }}`{% endif %}\n\n"
-        "## Associated Subnets\n"
-        "| Network Name | CIDR | Context | Description |\n"
-        "| --- | --- | --- | --- |\n"
-        "{% for net in networks -%}\n"
-        "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
-        "`{{ net.context }}` | {{ net.description or '' }} |\n"
-        "{% endfor %}\n"
-    ),
-    "environment.md": (
-        "# Environment: {{ name }}\n\n"
-        "## Properties\n"
-        "{% if properties.timeservers %}- **Timeservers**: `{{ properties.timeservers | join(', ') }}`{% endif %}\n"
-        "{% if properties.dns_nameservers %}"
-        "- **DNS Nameservers**: `{{ properties.dns_nameservers | join(', ') }}`{% endif %}\n"
-        "{% if properties.dns_search %}- **DNS Search**: `{{ properties.dns_search | join(', ') }}`{% endif %}\n"
-        "{% if properties.default_mtu %}- **Default MTU**: `{{ properties.default_mtu }}`{% endif %}\n\n"
-        "## Associated Subnets\n"
-        "| Network Name | CIDR | Context | Description |\n"
-        "| --- | --- | --- | --- |\n"
-        "{% for net in networks -%}\n"
-        "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
-        "`{{ net.context }}` | {{ net.description or '' }} |\n"
-        "{% endfor %}\n"
-    ),
-    "bridge_domain.md": (
-        "# Bridge Domain: {{ name }}\n\n"
-        "## Properties\n"
-        "{% if properties.datacenter %}- **Datacenter**: "
-        "[{{ properties.datacenter }}](../datacenters/{{ properties.datacenter }}.md){% endif %}\n"
-        "{% if properties.zone %}- **Zone**: [{{ properties.zone }}](../zones/{{ properties.zone }}.md){% endif %}\n"
-        "{% if properties.default_mtu %}- **Default MTU**: `{{ properties.default_mtu }}`{% endif %}\n\n"
-        "## Associated Subnets\n"
-        "| Network Name | CIDR | Context | Description |\n"
-        "| --- | --- | --- | --- |\n"
-        "{% for net in networks -%}\n"
-        "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
-        "`{{ net.context }}` | {{ net.description or '' }} |\n"
-        "{% endfor %}\n"
-    ),
-    "epg.md": (
-        "# EPG: {{ name }}\n\n"
-        "## Properties\n"
-        "- **VLAN**: `{{ properties.vlan or 'None' }}`\n"
-        "- **Bridge Domain**: [{{ properties.bridge_domain }}](../bridge_domains/{{ properties.bridge_domain }}.md)\n"
-        "- **Environment**: [{{ properties.environment }}](../environments/{{ properties.environment }}.md)\n"
-        "{% if properties.default_mtu %}- **MTU**: `{{ properties.default_mtu }}`{% endif %}\n\n"
-        "## Associated Subnets\n"
-        "| Network Name | CIDR | Context | Description |\n"
-        "| --- | --- | --- | --- |\n"
-        "{% for net in networks -%}\n"
-        "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
-        "`{{ net.context }}` | {{ net.description or '' }} |\n"
-        "{% endfor %}\n"
-    ),
-    "network.md": (
-        "# {{ network.name }}\n\n"
-        "## Settings\n"
-        "- **CIDR**: `{{ network.cidr }}`\n"
-        "- **Context**: `{{ network.context }}`\n"
-        "{% if network.description %}- **Description**: {{ network.description }}{% endif %}\n"
-        "- **VLAN**: `{{ network.vlan or 'None' }}`\n"
-        "- **Bridge Domain**: {% if network.bridge_domain %}"
-        "[{{ network.bridge_domain }}](../bridge_domains/{{ network.bridge_domain }}.md){% else %}`None`{% endif %}\n"
-        "- **Environment**: {% if network.environment %}"
-        "[{{ network.environment }}](../environments/{{ network.environment }}.md){% else %}`None`{% endif %}\n"
-        "- **EPG**: {% if network.epg %}[{{ network.epg }}](../epgs/{{ network.epg }}.md){% else %}`None`{% endif %}\n"
-        "- **MTU**: `{{ network.default_mtu or 'None' }}`\n\n"
-        "- **DNS Nameservers**: `{{ (network.dns_nameservers or []) | join(', ') or 'None' }}`\n"
-        "- **DNS Search**: `{{ (network.dns_search or []) | join(', ') or 'None' }}`\n"
-        "- **Timeservers**: `{{ (network.timeservers or []) | join(', ') or 'None' }}`\n\n"
-        "{% if network.static_routes %}\n"
-        "- **Static Routes**:\n"
-        "  {% for route in network.static_routes %}\n"
-        "  - `{{ route.cidr }} via {{ route.gateway }}`\n"
-        "  {% endfor %}\n"
-        "{% else %}\n"
-        "- **Static Routes**: `None`\n"
-        "{% endif %}\n\n"
-        "- **Zone**: {% if network.zone %}"
-        "[{{ network.zone }}](../zones/{{ network.zone }}.md){% else %}`None`{% endif %}\n"
-        "- **Datacenter**: {% if network.datacenter %}"
-        "[{{ network.datacenter }}](../datacenters/{{ network.datacenter }}.md){% else %}`None`{% endif %}\n"
-        "- **Routable**: `{{ network.routable }}`\n"
-        "- **Reserve Gateway**: `{{ network.reserve_gateway }}`\n"
-        "- **Reserve Internal**: `{{ network.reserve_internal }}`\n\n"
-        "## Reservations\n"
-        "{% if network.effective_reservations %}\n"
-        "| ID | CIDR | Comment | Allocatable | Allocations | Usage |\n"
-        "| --- | --- | --- | --- | --- | --- |\n"
-        "{% for res in network.effective_reservations -%}\n"
-        "{% set usage = network.get_reservation_usage(res.id) -%}\n"
-        "| {{ res.id }} | {{ res.cidr }} | {{ res.comment }} | {{ res.allocatable }} | "
-        "{{ usage.count }} | {{ usage.count }}/{{ usage.total }} "
-        "({{ \"%.1f\" | format(usage.percent) }}%) |\n"
-        "{% endfor %}\n"
-        "{% else %}\n"
-        "_No reservations._\n"
-        "{% endif %}\n\n"
-        "{% if network.allocations %}\n"
-        "## Allocations\n"
-        "| IP/CIDR | Hostname/Comment |\n"
-        "| --- | --- |\n"
-        "{% for alloc in network.allocations -%}\n"
-        "{% if alloc.ip -%}\n"
-        "| {{ alloc.ip }} | {{ alloc.hostname }} |\n"
-        "{% else -%}\n"
-        "| {{ alloc.cidr }} | {{ alloc.comment }} |\n"
-        "{% endif -%}\n"
-        "{% endfor %}\n"
-        "{% endif %}\n\n"
-        "{% set unreserved = network.get_unreserved_display_ranges() %}\n"
-        "{% if unreserved %}\n"
-        "## Unreserved Ranges\n"
-        "{% for rng in unreserved -%}\n"
-        "- `{{ rng }}`\n"
-        "{% endfor %}\n"
-        "{% endif %}\n"
-    ),
-}
+# Resolve the absolute path of the bundled default templates directory
+DEFAULT_TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 
 def generate_markdown_report(networks: List[Network], output_dir: str, templates_dir: Optional[str] = None):
@@ -217,15 +43,13 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
     else:
         db_dir = "networks"
 
-    # 2. Configure Jinja2 environment with ChoiceLoader for overrides
+    # 2. Configure Jinja2 environment loaders: user folder overrides -> bundled defaults
+    loaders = []
     if templates_dir and os.path.isdir(templates_dir):
-        loader = jinja2.ChoiceLoader(
-            [jinja2.FileSystemLoader(templates_dir), jinja2.DictLoader(DEFAULT_TEMPLATES)]
-        )
-    else:
-        loader = jinja2.DictLoader(DEFAULT_TEMPLATES)
+        loaders.append(jinja2.FileSystemLoader(templates_dir))
+    loaders.append(jinja2.FileSystemLoader(DEFAULT_TEMPLATES_DIR))
 
-    env = jinja2.Environment(loader=loader)
+    env = jinja2.Environment(loader=jinja2.ChoiceLoader(loaders))
 
     # 3. Create relational subdirectories under output_dir
     subdirs = ["datacenters", "zones", "environments", "bridge_domains", "epgs", "networks"]
@@ -320,4 +144,35 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
 
     content = env.get_template("index.md").render(tree=tree, unassigned_networks=unassigned_networks)
     with open(os.path.join(output_dir, "README.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # 7. Render indices (README.md) inside each sub-directory
+    # Datacenters Index
+    content = env.get_template("datacenter_index.md").render(datacenters=datacenters)
+    with open(os.path.join(output_dir, "datacenters", "README.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Zones Index
+    content = env.get_template("zone_index.md").render(zones=zones)
+    with open(os.path.join(output_dir, "zones", "README.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Environments Index
+    content = env.get_template("environment_index.md").render(environments=environments)
+    with open(os.path.join(output_dir, "environments", "README.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Bridge Domains Index
+    content = env.get_template("bridge_domain_index.md").render(bridge_domains=bridge_domains)
+    with open(os.path.join(output_dir, "bridge_domains", "README.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # EPGs Index
+    content = env.get_template("epg_index.md").render(epgs=epgs)
+    with open(os.path.join(output_dir, "epgs", "README.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Networks Index
+    content = env.get_template("network_index.md").render(networks=sorted_networks)
+    with open(os.path.join(output_dir, "networks", "README.md"), "w", encoding="utf-8") as f:
         f.write(content)
