@@ -9,5 +9,4 @@
 ## Associated Subnets
 | Network Name | CIDR | Context | Description |
 | --- | --- | --- | --- |
-
 | [example_net](../networks/example_net.md) | `10.0.0.0/24` | `default` | Production Web Tier |

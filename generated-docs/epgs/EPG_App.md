@@ -9,5 +9,4 @@
 ## Associated Subnets
 | Network Name | CIDR | Context | Description |
 | --- | --- | --- | --- |
-
 | [backend_net](../networks/backend_net.md) | `10.0.2.0/24` | `default` | Application Backend |

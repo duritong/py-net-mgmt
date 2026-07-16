@@ -1,6 +1,5 @@
 import os
 from typing import List, Optional
-
 import jinja2
 
 from .core import Network
@@ -34,7 +33,7 @@ DEFAULT_TEMPLATES = {
         "## 📂 Unassigned Networks\n"
         "| Name | CIDR | Context | VLAN | Description |\n"
         "| --- | --- | --- | --- | --- |\n"
-        "{% for net in unassigned_networks %}\n"
+        "{% for net in unassigned_networks -%}\n"
         "| [{{ net.name }}](networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
         "`{{ net.context or 'default' }}` | `{{ net.vlan or 'None' }}` | {{ net.description or '' }} |\n"
         "{% endfor %}\n"
@@ -51,7 +50,7 @@ DEFAULT_TEMPLATES = {
         "## Associated Subnets\n"
         "| Network Name | CIDR | Context | Description |\n"
         "| --- | --- | --- | --- |\n"
-        "{% for net in networks %}\n"
+        "{% for net in networks -%}\n"
         "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
         "`{{ net.context }}` | {{ net.description or '' }} |\n"
         "{% endfor %}\n"
@@ -67,7 +66,7 @@ DEFAULT_TEMPLATES = {
         "## Associated Subnets\n"
         "| Network Name | CIDR | Context | Description |\n"
         "| --- | --- | --- | --- |\n"
-        "{% for net in networks %}\n"
+        "{% for net in networks -%}\n"
         "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
         "`{{ net.context }}` | {{ net.description or '' }} |\n"
         "{% endfor %}\n"
@@ -83,7 +82,7 @@ DEFAULT_TEMPLATES = {
         "## Associated Subnets\n"
         "| Network Name | CIDR | Context | Description |\n"
         "| --- | --- | --- | --- |\n"
-        "{% for net in networks %}\n"
+        "{% for net in networks -%}\n"
         "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
         "`{{ net.context }}` | {{ net.description or '' }} |\n"
         "{% endfor %}\n"
@@ -98,7 +97,7 @@ DEFAULT_TEMPLATES = {
         "## Associated Subnets\n"
         "| Network Name | CIDR | Context | Description |\n"
         "| --- | --- | --- | --- |\n"
-        "{% for net in networks %}\n"
+        "{% for net in networks -%}\n"
         "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
         "`{{ net.context }}` | {{ net.description or '' }} |\n"
         "{% endfor %}\n"
@@ -113,7 +112,7 @@ DEFAULT_TEMPLATES = {
         "## Associated Subnets\n"
         "| Network Name | CIDR | Context | Description |\n"
         "| --- | --- | --- | --- |\n"
-        "{% for net in networks %}\n"
+        "{% for net in networks -%}\n"
         "| [{{ net.name }}](../networks/{{ net.name }}.md) | `{{ net.cidr }}` | "
         "`{{ net.context }}` | {{ net.description or '' }} |\n"
         "{% endfor %}\n"
@@ -153,11 +152,11 @@ DEFAULT_TEMPLATES = {
         "{% if network.effective_reservations %}\n"
         "| ID | CIDR | Comment | Allocatable | Allocations | Usage |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
-        "{% for res in network.effective_reservations %}\n"
-        "{% set usage = network.get_reservation_usage(res.id) %}\n"
+        "{% for res in network.effective_reservations -%}\n"
+        "{% set usage = network.get_reservation_usage(res.id) -%}\n"
         "| {{ res.id }} | {{ res.cidr }} | {{ res.comment }} | {{ res.allocatable }} | "
         "{{ usage.count }} | {{ usage.count }}/{{ usage.total }} "
-        '({{ "%.1f" | format(usage.percent) }}%) |\n'
+        "({{ \"%.1f\" | format(usage.percent) }}%) |\n"
         "{% endfor %}\n"
         "{% else %}\n"
         "_No reservations._\n"
@@ -166,18 +165,18 @@ DEFAULT_TEMPLATES = {
         "## Allocations\n"
         "| IP/CIDR | Hostname/Comment |\n"
         "| --- | --- |\n"
-        "{% for alloc in network.allocations %}\n"
-        "{% if alloc.ip %}\n"
+        "{% for alloc in network.allocations -%}\n"
+        "{% if alloc.ip -%}\n"
         "| {{ alloc.ip }} | {{ alloc.hostname }} |\n"
-        "{% else %}\n"
+        "{% else -%}\n"
         "| {{ alloc.cidr }} | {{ alloc.comment }} |\n"
-        "{% endif %}\n"
+        "{% endif -%}\n"
         "{% endfor %}\n"
         "{% endif %}\n\n"
         "{% set unreserved = network.get_unreserved_display_ranges() %}\n"
         "{% if unreserved %}\n"
         "## Unreserved Ranges\n"
-        "{% for rng in unreserved %}\n"
+        "{% for rng in unreserved -%}\n"
         "- `{{ rng }}`\n"
         "{% endfor %}\n"
         "{% endif %}\n"
@@ -220,7 +219,9 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
 
     # 2. Configure Jinja2 environment with ChoiceLoader for overrides
     if templates_dir and os.path.isdir(templates_dir):
-        loader = jinja2.ChoiceLoader([jinja2.FileSystemLoader(templates_dir), jinja2.DictLoader(DEFAULT_TEMPLATES)])
+        loader = jinja2.ChoiceLoader(
+            [jinja2.FileSystemLoader(templates_dir), jinja2.DictLoader(DEFAULT_TEMPLATES)]
+        )
     else:
         loader = jinja2.DictLoader(DEFAULT_TEMPLATES)
 

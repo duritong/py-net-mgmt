@@ -28,11 +28,7 @@
 
 | ID | CIDR | Comment | Allocatable | Allocations | Usage |
 | --- | --- | --- | --- | --- | --- |
-
-
 | sys-network | 10.3.128.0 | network address | False | 0 | 0/1 (0.0%) |
-
-
 | sys-broadcast | 10.3.191.255 | broadcast address | False | 0 | 0/1 (0.0%) |
 
 
@@ -42,6 +38,5 @@
 
 
 ## Unreserved Ranges
-
 - `10.3.128.0 - 10.3.191.255`
 
