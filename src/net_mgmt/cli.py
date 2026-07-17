@@ -29,8 +29,15 @@ def validate(path):
 @cli.command()
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
 @click.option("--description", "-d", default=None, help="Filter networks by description (case-insensitive substring)")
-def list(path, description):
-    """List all available networks"""
+@click.option("--vlan", "-v", type=int, default=None, help="Filter networks by VLAN ID")
+@click.option("--environment", "-e", default=None, help="Filter networks by Environment name")
+@click.option("--datacenter", "--dc", default=None, help="Filter networks by Datacenter name")
+@click.option("--zone", "-z", default=None, help="Filter networks by Zone name")
+@click.option("--epg", default=None, help="Filter networks by EPG name")
+@click.option("--bridge-domain", "--bd", default=None, help="Filter networks by Bridge Domain name")
+@click.option("--context", "-c", default=None, help="Filter networks by Context name")
+def list(path, description, vlan, environment, datacenter, zone, epg, bridge_domain, context):
+    """List available networks with coordinate filtering"""
     set_db_path(path)
     try:
         networks = get_database()
@@ -42,10 +49,20 @@ def list(path, description):
         click.echo("No networks found.")
         return
 
-    # Apply description filter if provided
-    if description:
-        description_lower = description.lower()
-        networks = [n for n in networks if n.description and description_lower in n.description.lower()]
+    # Symmetrical Filtering using Core query_networks
+    from .core import query_networks as core_query_networks
+
+    filters = {
+        "description": description,
+        "vlan": vlan,
+        "environment": environment,
+        "datacenter": datacenter,
+        "zone": zone,
+        "epg": epg,
+        "bridge_domain": bridge_domain,
+        "context": context,
+    }
+    networks = core_query_networks(networks, filters=filters)
 
     if not networks:
         click.echo("No matching networks found.")

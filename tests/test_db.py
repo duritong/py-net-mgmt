@@ -121,6 +121,29 @@ class TestEntityCache(unittest.TestCase):
         self.assertEqual(len(db._ENTITY_CACHE), 0)
         self.assertIsNone(db._DB_CACHE)
 
+    def test_programmatic_entity_lookups(self):
+        from src.net_mgmt import (
+            get_datacenter_by_name,
+            get_epg_by_name,
+        )
+
+        # Write dummy configs
+        os.makedirs(os.path.join(self.db_dir, "datacenters"), exist_ok=True)
+        with open(os.path.join(self.db_dir, "datacenters", "DC1.yaml"), "w") as f:
+            f.write("timeservers: ['1.1.1.1']\n")
+        with open(os.path.join(self.db_dir, "epgs", "EPG1.yaml"), "w") as f:
+            f.write("vlan: 10\n")
+
+        # Programmatically retrieve them at root package level
+        epg = get_epg_by_name("EPG1")
+        self.assertEqual(epg, {"vlan": 10})
+
+        dc = get_datacenter_by_name("DC1")
+        self.assertEqual(dc, {"timeservers": ["1.1.1.1"]})
+
+        # Non-existent returns None
+        self.assertIsNone(get_epg_by_name("nonexistent"))
+
 
 if __name__ == "__main__":
     unittest.main()

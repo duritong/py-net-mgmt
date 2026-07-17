@@ -31,10 +31,11 @@ The net-mgmt library helps to de-duplicate redundant networking information (suc
 * Easy consumable by humans and easily applying to gitops workflows
 * Validates the stored data and ensures network usage consistency
 * Avoids redundant data / information within the source
-* Provides aggregated views through a cli, easily consumable and verifiable by humas
-* Provides means to generate network documentation and share information about hte current usage
-* Provides interfaces for other automation tools
-* Provides jinja2 filters to consume the data in net-mgmt within templates
+* Provides aggregated views through a cli, easily consumable and verifiable by humas (use case cli)
+* Provides interfaces for other automation tools (use case code)
+* Provides jinja2 filters to consume the data in net-mgmt within templates (use case jinja2 filters)
+* Treat the three use cases: cli, jinja2 filters and code as equal first class citiziens where any option in one class should also be available to the other class where applicable (e.g. query or modification functions in all 3 - rendering output only in specific, like table views in cli)
+* Provides means to generate network documentation and share information about the current usage
 * Supports thread-safe, concurrent local allocations to support parallel access and workflows.
 * Keeps data structures and YAML schemas loosely aligned with typical NetBox exports, making it trivial to write synchronization scripts that cache NetBox datasets into local Git repositories.
 * Provides standard programmatic and CLI routines for de-allocating/pruning obsolete hostnames to maintain a clean database and prevent IP exhaustion.

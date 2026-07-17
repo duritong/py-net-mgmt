@@ -19,6 +19,7 @@ class TestCliList(unittest.TestCase):
         with open(self.network_file, "w") as f:
             f.write("""
 cidr: 192.168.100.0/24
+vlan: 10
 description: Test Network Description
 datacenter: DC1
 zone: dmz
@@ -65,6 +66,27 @@ default_mtu: 1500
         result2 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--description", "nonexistent"])
         self.assertEqual(result2.exit_code, 0)
         self.assertIn("No matching networks found.", result2.output)
+
+    def test_list_with_coordinate_filters(self):
+        # 1. Matching VLAN ID -> should list
+        result1 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--vlan", "10"])
+        self.assertEqual(result1.exit_code, 0)
+        self.assertIn("test_net", result1.output)
+
+        # 2. Non-matching VLAN ID -> should output No matching networks found
+        result2 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--vlan", "999"])
+        self.assertEqual(result2.exit_code, 0)
+        self.assertIn("No matching networks found.", result2.output)
+
+        # 3. Matching Datacenter -> should list
+        result3 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--dc", "DC1"])
+        self.assertEqual(result3.exit_code, 0)
+        self.assertIn("test_net", result3.output)
+
+        # 4. Non-matching Datacenter -> should output No matching networks found
+        result4 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--dc", "DC2"])
+        self.assertEqual(result4.exit_code, 0)
+        self.assertIn("No matching networks found.", result4.output)
 
 
 class TestCliListEmpty(unittest.TestCase):

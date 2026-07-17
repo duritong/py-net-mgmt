@@ -52,6 +52,31 @@ def clear_db_cache():
     _ENTITY_CACHE.clear()
 
 
+def get_epg_by_name(name: str) -> Optional[dict]:
+    """Retrieve EPG properties by name programmatically."""
+    return get_cached_entities("epgs").get(name)
+
+
+def get_bridge_domain_by_name(name: str) -> Optional[dict]:
+    """Retrieve Bridge Domain properties by name programmatically."""
+    return get_cached_entities("bridge_domains").get(name)
+
+
+def get_environment_by_name(name: str) -> Optional[dict]:
+    """Retrieve Environment properties by name programmatically."""
+    return get_cached_entities("environments").get(name)
+
+
+def get_zone_by_name(name: str) -> Optional[dict]:
+    """Retrieve Zone properties by name programmatically."""
+    return get_cached_entities("zones").get(name)
+
+
+def get_datacenter_by_name(name: str) -> Optional[dict]:
+    """Retrieve Datacenter properties by name programmatically."""
+    return get_cached_entities("datacenters").get(name)
+
+
 def get_database(force_reload: bool = False) -> List[Network]:
     global _DB_CACHE
     if _DB_CACHE is None or force_reload:

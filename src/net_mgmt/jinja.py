@@ -3,7 +3,7 @@ from typing import Any, List, Optional
 
 from .core import Allocation, Network
 from .core import query_networks as core_query_networks
-from .db import get_cached_entities, get_database
+from .db import get_database
 
 
 def _ensure_networks(value: Any) -> List[Network]:
@@ -187,10 +187,26 @@ class RelationalEntity:
 
 def _lookup_entity(subdir: str, name: str) -> Optional[RelationalEntity]:
     """Helper to lookup relational entity metadata and wrap as RelationalEntity."""
-    entities = get_cached_entities(subdir)
-    data = entities.get(name)
-    if data is not None:
-        return RelationalEntity(name, data, subdir)
+    from .db import (
+        get_bridge_domain_by_name,
+        get_datacenter_by_name,
+        get_environment_by_name,
+        get_epg_by_name,
+        get_zone_by_name,
+    )
+
+    mapping = {
+        "epgs": get_epg_by_name,
+        "bridge_domains": get_bridge_domain_by_name,
+        "environments": get_environment_by_name,
+        "zones": get_zone_by_name,
+        "datacenters": get_datacenter_by_name,
+    }
+    func = mapping.get(subdir)
+    if func:
+        data = func(name)
+        if data is not None:
+            return RelationalEntity(name, data, subdir)
     return None
 
 

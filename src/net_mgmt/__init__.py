@@ -1,6 +1,11 @@
 from .core import Network as Network
 from .core import Reservation as Reservation
+from .db import get_bridge_domain_by_name as get_bridge_domain_by_name
 from .db import get_database as get_database
+from .db import get_datacenter_by_name as get_datacenter_by_name
+from .db import get_environment_by_name as get_environment_by_name
+from .db import get_epg_by_name as get_epg_by_name
+from .db import get_zone_by_name as get_zone_by_name
 from .db import set_db_path as set_db_path
 from .db import validate_network_list as validate_network_list
 from .jinja import register_filters as register_filters

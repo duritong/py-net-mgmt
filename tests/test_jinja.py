@@ -148,7 +148,7 @@ class TestJinjaRendering(unittest.TestCase):
         template = self.env.from_string("{{ 'prod' | vlans_in_environment | join(',') }}")
         self.assertEqual(template.render(), "10,20")
 
-    @patch("src.net_mgmt.jinja.get_cached_entities")
+    @patch("src.net_mgmt.db.get_cached_entities")
     def test_relational_entity_lookup_filters(self, mock_load):
         # Setup mock data for epgs, bridge_domains, environments, zones, and datacenters
         def mock_load_subdir(subdir):
