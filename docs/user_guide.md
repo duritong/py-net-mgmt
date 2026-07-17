@@ -116,6 +116,26 @@ reservations:
 
 ---
 
+### Command: `edit`
+Launches the interactive text editor defined in your shell env variable `$EDITOR` (falling back to `vi` or `nano`) to instantly open and edit any database entity YAML file (networks, epgs, datacenters, zones, bridge domains, environments).
+- Automatically handles singular or plural entity type normalization (`network` ➔ `networks`).
+- Automatically handles hyphen or underscore normalization (`bridge-domain` ➔ `bridge_domains`).
+- In legacy flat databases, recursively walks subdirectories to find network files.
+- Automatically scaffolds parent subdirectory directories if you are creating or editing a new file.
+
+```bash
+# Edit an EPG file inside your relational database
+net-mgmt edit epg EPG_App
+
+# Edit a network file inside your legacy or relational database
+net-mgmt edit network example_net
+
+# Edit a bridge domain file inside your relational database
+net-mgmt edit bridge-domain BD_Prod
+```
+
+---
+
 ### Command: `generate-markdown`
 Renders the complete networks database into an output directory using decoupled, pluggable Jinja2 templates:
 - Generates a central `README.md` index file containing a sleek, hierarchical nested bullet list representing your network topology.

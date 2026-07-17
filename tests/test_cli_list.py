@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 
 from click.testing import CliRunner
 
@@ -142,6 +143,54 @@ class TestCliListEmpty(unittest.TestCase):
         result = self.runner.invoke(cli, ["list", "--path", self.networks_dir])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("No networks found.", result.output)
+
+
+class TestCliEdit(unittest.TestCase):
+    def setUp(self):
+        self.runner = CliRunner()
+        self.test_dir = tempfile.mkdtemp()
+        self.networks_dir = os.path.join(self.test_dir, "networks")
+        os.makedirs(self.networks_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    @unittest.mock.patch("subprocess.run")
+    def test_edit_network_legacy(self, mock_run):
+        # Create a network file
+        net_file = os.path.join(self.networks_dir, "test_net.yaml")
+        with open(net_file, "w") as f:
+            f.write("cidr: 10.0.0.0/24")
+
+        # Mock env EDITOR
+        import os as local_os
+
+        with unittest.mock.patch.dict(local_os.environ, {"EDITOR": "nano"}):
+            result = self.runner.invoke(cli, ["edit", "network", "test_net", "--path", self.networks_dir])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("Opening", result.output)
+            self.assertIn("nano", result.output)
+            mock_run.assert_called_once_with(["nano", net_file], check=True)
+
+    @unittest.mock.patch("subprocess.run")
+    def test_edit_network_relational(self, mock_run):
+        # Create relational folder structure
+        os.makedirs(os.path.join(self.test_dir, "epgs"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "networks"), exist_ok=True)
+
+        epg_file = os.path.join(self.test_dir, "epgs", "EPG_App.yaml")
+        with open(epg_file, "w") as f:
+            f.write("vlan: 10")
+
+        # Mock env EDITOR
+        import os as local_os
+
+        with unittest.mock.patch.dict(local_os.environ, {"EDITOR": "vim"}):
+            result = self.runner.invoke(cli, ["edit", "epg", "EPG_App", "--path", self.test_dir])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("Opening", result.output)
+            self.assertIn("vim", result.output)
+            mock_run.assert_called_once_with(["vim", epg_file], check=True)
 
 
 if __name__ == "__main__":

@@ -583,6 +583,74 @@ def apply_template(template, network, path):
             console.print(f"  [bold red]Error:[/bold red] [red]{e}[/red]")
 
 
+@cli.command()
+@click.argument("entity_type")
+@click.argument("name")
+@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
+def edit(entity_type, name, path):
+    """Open the respective database file inside $EDITOR"""
+    import subprocess
+
+    # Normalize entity type (e.g. network -> networks, bridge-domain -> bridge_domains)
+    normalized_type = entity_type.lower().replace("-", "_")
+    if not normalized_type.endswith("s"):
+        normalized_type += "s"
+
+    if normalized_type not in ["networks", "epgs", "bridge_domains", "datacenters", "zones", "environments"]:
+        click.echo(f"Error: Unknown entity type '{entity_type}'.")
+        exit(1)
+
+    from .loader import is_relational_mode
+
+    relational = is_relational_mode(path)
+    file_path = None
+
+    if relational:
+        # Check standard relational subdirectory folder
+        possible_extensions = [".yaml", ".yml"]
+        for ext in possible_extensions:
+            p = os.path.join(path, normalized_type, f"{name}{ext}")
+            if os.path.exists(p):
+                file_path = p
+                break
+        if not file_path:
+            # Fallback to suggestion
+            file_path = os.path.join(path, normalized_type, f"{name}.yaml")
+    else:
+        # Legacy Mode - only networks exist as individual files
+        if normalized_type != "networks":
+            click.echo(
+                f"Error: Entity type '{entity_type}' is only available in Relational Multi-Folder Database Mode."
+            )
+            exit(1)
+
+        # Search recursively for network file
+        for root, _, files in os.walk(path):
+            for file in files:
+                basename, ext = os.path.splitext(file.lower())
+                if basename == name.lower() and ext in [".yaml", ".yml"]:
+                    file_path = os.path.join(root, file)
+                    break
+            if file_path:
+                break
+
+        if not file_path:
+            file_path = os.path.join(path, f"{name}.yaml")
+
+    # Scaffold the directory if missing
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    # Resolve active editor from environment with safe terminal fallback
+    editor = os.environ.get("EDITOR", "vi")
+
+    click.echo(f"Opening '{file_path}' in editor '{editor}'...")
+    try:
+        subprocess.run([editor, file_path], check=True)
+    except Exception as e:
+        click.echo(f"Error: Failed to launch editor '{editor}': {e}")
+        exit(1)
+
+
 def main():
     cli()
 
