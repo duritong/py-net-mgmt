@@ -114,6 +114,19 @@ default_mtu: 1500
         self.assertEqual(result.exit_code, 0)
         self.assertIn("test_net", result.output)
 
+    def test_list_formats(self):
+        # 1. Test JSON format
+        result_json = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--format", "json"])
+        self.assertEqual(result_json.exit_code, 0)
+        self.assertIn("192.168.100.0/24", result_json.output)
+        self.assertIn('"name": "test_net"', result_json.output)
+
+        # 2. Test CSV format
+        result_csv = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--format", "csv"])
+        self.assertEqual(result_csv.exit_code, 0)
+        self.assertIn("Name,CIDR,Context,Datacenter,Zone,Environment,MTU,Description", result_csv.output)
+        self.assertIn("test_net,192.168.100.0/24", result_csv.output)
+
 
 class TestCliListEmpty(unittest.TestCase):
     def setUp(self):

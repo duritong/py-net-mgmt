@@ -39,26 +39,36 @@ Restart your terminal or run `source ~/.bashrc` to instantly activate auto-compl
 ---
 
 ### Command: `list`
-Lists all networks in the database, displaying their core attributes (Name, CIDR, Context, Datacenter, Zone, Environment, MTU, and Description) in a clean terminal table. Features coordinate filters and column wrap configuration.
+Lists all networks in the database, displaying their core attributes (Name, CIDR, Context, Datacenter, Zone, Environment, MTU, and Description) in a clean terminal table. Features coordinate filters, column wrap configuration, and multiple output format filters.
 * `--no-wrap`: Disables column text wrapping and truncation, forcing each network row to output as a single, fully expanded line (perfect for piping/scripting or displaying long names).
+* `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
 
 ```bash
-# List all networks
+# List all networks in tabular format
 net-mgmt list
 
-# List networks with column text wrapping and truncation disabled
-net-mgmt list --no-wrap
+# List networks formatted as standard structured JSON
+net-mgmt list --format json
 
-# List only networks whose description contains 'Storage' (case-insensitive substring)
-net-mgmt list --description Storage
+# List networks formatted as CSV
+net-mgmt list -f csv
 ```
 
 ---
 
 ### Command: `show`
-Displays full structured details for a specific network (all metadata, active reservations, IP allocations, utilization statistics, and usable unreserved ranges).
+Displays full structured details for a specific network (all metadata, active reservations, IP allocations, utilization statistics, and usable unreserved ranges). Supports structured format exports.
+* `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
+
 ```bash
+# Show detailed tables of a network
 net-mgmt show backend_net
+
+# Show network properties as detailed, structured JSON (includes all sub-arrays)
+net-mgmt show backend_net --format json
+
+# Show network allocations and pools as standard CSV rows
+net-mgmt show backend_net -f csv
 ```
 
 ---

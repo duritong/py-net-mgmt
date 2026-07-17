@@ -53,6 +53,21 @@ allocations:
         self.assertIn("Unreserved Ranges:", result.output)
         self.assertIn("192.168.100.6 - 192.168.100.9", result.output)
 
+    def test_show_formats(self):
+        # 1. Test JSON format
+        result_json = self.runner.invoke(cli, ["show", "test_net", "--format", "json", "--path", self.networks_dir])
+        self.assertEqual(result_json.exit_code, 0)
+        self.assertIn('"cidr": "192.168.100.0/24"', result_json.output)
+        self.assertIn('"reservations":', result_json.output)
+        self.assertIn('"allocations":', result_json.output)
+
+        # 2. Test CSV format
+        result_csv = self.runner.invoke(cli, ["show", "test_net", "--format", "csv", "--path", self.networks_dir])
+        self.assertEqual(result_csv.exit_code, 0)
+        self.assertIn("Type,ID_Hostname,CIDR_IP,Comment,Allocatable", result_csv.output)
+        self.assertIn("reservation,pool1,192.168.100.10-192.168.100.200", result_csv.output)
+        self.assertIn("allocation,host1,192.168.100.10", result_csv.output)
+
 
 if __name__ == "__main__":
     unittest.main()

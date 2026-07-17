@@ -40,7 +40,16 @@ def validate(path):
 @click.option("--bridge-domain", "--bd", default=None, help="Filter networks by Bridge Domain name")
 @click.option("--context", "-c", default=None, help="Filter networks by Context name")
 @click.option("--no-wrap", is_flag=True, default=False, help="Do not wrap or truncate text inside table columns")
-def list(path, description, cidr, ip, vlan, environment, datacenter, zone, epg, bridge_domain, context, no_wrap):
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["table", "csv", "json"]),
+    default="table",
+    help="Output format (table, csv, json)",
+)
+def list(
+    path, description, cidr, ip, vlan, environment, datacenter, zone, epg, bridge_domain, context, no_wrap, format
+):
     """List available networks with coordinate filtering"""
     set_db_path(path)
     try:
@@ -72,6 +81,33 @@ def list(path, description, cidr, ip, vlan, environment, datacenter, zone, epg, 
 
     if not networks:
         click.echo("No matching networks found.")
+        return
+
+    if format == "json":
+        import json
+
+        click.echo(json.dumps([n.to_dict for n in networks], indent=2))
+        return
+
+    if format == "csv":
+        import csv
+        import sys
+
+        writer = csv.writer(sys.stdout)
+        writer.writerow(["Name", "CIDR", "Context", "Datacenter", "Zone", "Environment", "MTU", "Description"])
+        for net in networks:
+            writer.writerow(
+                [
+                    net.name,
+                    str(net.cidr),
+                    net.context or "default",
+                    net.datacenter or "",
+                    net.zone or "",
+                    net.environment or "",
+                    str(net.default_mtu) if net.default_mtu is not None else "",
+                    net.description or "",
+                ]
+            )
         return
 
     import sys
@@ -108,8 +144,15 @@ def list(path, description, cidr, ip, vlan, environment, datacenter, zone, epg, 
 
 @cli.command()
 @click.argument("name")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["table", "csv", "json"]),
+    default="table",
+    help="Output format (table, csv, json)",
+)
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-def show(name, path):
+def show(name, format, path):
     """Show details of a specific network"""
     set_db_path(path)
     try:
@@ -122,6 +165,28 @@ def show(name, path):
 
     if not network:
         click.echo(f"Network '{name}' not found.")
+        return
+
+    if format == "json":
+        import json
+
+        click.echo(json.dumps(network.to_dict, indent=2))
+        return
+
+    if format == "csv":
+        import csv
+        import sys
+
+        writer = csv.writer(sys.stdout)
+        writer.writerow(["Type", "ID_Hostname", "CIDR_IP", "Comment", "Allocatable"])
+        # Reservations
+        for res in network.effective_reservations:
+            writer.writerow(
+                ["reservation", res.id, str(res.cidr), res.comment or "", "True" if res.allocatable else "False"]
+            )
+        # Allocations
+        for alloc in network.allocations:
+            writer.writerow(["allocation", alloc.hostname or "", str(alloc.ip or alloc.cidr), alloc.comment or "", ""])
         return
 
     import sys
