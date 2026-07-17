@@ -426,7 +426,7 @@ def load_yaml_files_from_subdir(directory: str, subdir: str) -> dict:
     path = os.path.join(directory, subdir)
     if not os.path.isdir(path):
         return result
-    for file in os.listdir(path):
+    for file in sorted(os.listdir(path)):
         if file.lower().endswith(".yaml"):  # Enforce standard .yaml extension!
             name = os.path.splitext(file)[0]
             file_path = os.path.join(path, file)
