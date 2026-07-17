@@ -221,8 +221,10 @@ allocations:
 reservations:
   - id: pool2
     cidr: 10.0.0.64/28
+    allocatable: true
   - id: pool1
     cidr: 10.0.0.0/28
+    allocatable: true
 """
         networks_dir = os.path.join(self.test_dir, "networks")
         os.makedirs(networks_dir)
@@ -285,6 +287,53 @@ reservations:
         self.assertEqual(result2.exit_code, 0)
         self.assertIn("Formatted: 0 file(s)", result2.output)
         self.assertIn("Skipped: 1 file(s)", result2.output)
+
+    def test_format_safety_and_validate_format_delegation(self):
+        # 1. Setup a directory with overlapping CIDR validation errors
+        networks_dir = os.path.join(self.test_dir, "networks_invalid")
+        os.makedirs(networks_dir)
+
+        # Write overlapping subnets (which triggers ValueError during get_database())
+        with open(os.path.join(networks_dir, "net1.yaml"), "w") as f:
+            f.write("cidr: 10.0.0.0/24\n")
+        with open(os.path.join(networks_dir, "net2.yaml"), "w") as f:
+            f.write("cidr: 10.0.0.0/24\n")  # Overlap!
+
+        # 2. Assert format command FAILS and exits with non-zero when validation fails!
+        result_fmt = self.runner.invoke(cli, ["format", "--path", networks_dir])
+        self.assertNotEqual(result_fmt.exit_code, 0)
+        self.assertIn("Format Error: Cannot format because database contains validation errors", result_fmt.output)
+
+        # 3. Assert validate --format also fails immediately and does not format
+        result_val_err = self.runner.invoke(cli, ["validate", "--path", networks_dir, "--format"])
+        self.assertNotEqual(result_val_err.exit_code, 0)
+        self.assertIn("Validation Error", result_val_err.output)
+
+        # 4. Resolve the validation issue
+        with open(os.path.join(networks_dir, "net2.yaml"), "w") as f:
+            f.write("""# DC Info Comment
+datacenter: DC1
+cidr: 10.0.1.0/24  # Valid now
+# Description Comment
+description: "Net 2"
+""")
+
+        # 5. Assert validate --format now succeeds AND formats the resolved file successfully!
+        result_val_ok = self.runner.invoke(cli, ["validate", "--path", networks_dir, "--format"])
+        self.assertEqual(result_val_ok.exit_code, 0)
+        self.assertIn("Successfully validated 2 networks.", result_val_ok.output)
+        self.assertIn("Format complete. Formatted: 1 file(s)", result_val_ok.output)
+
+        # 6. Read net2.yaml and verify that it was formatted (description comes first, then datacenter, then cidr!)
+        with open(os.path.join(networks_dir, "net2.yaml"), "r") as f:
+            net2_content = f.read()
+
+        lines = [line.strip() for line in net2_content.splitlines() if line.strip()]
+        desc_idx = [i for i, line in enumerate(lines) if "description:" in line][0]
+        dc_idx = [i for i, line in enumerate(lines) if "datacenter:" in line][0]
+        cidr_idx = [i for i, line in enumerate(lines) if "cidr:" in line][0]
+        self.assertTrue(desc_idx < dc_idx)
+        self.assertTrue(dc_idx < cidr_idx)
 
 
 if __name__ == "__main__":

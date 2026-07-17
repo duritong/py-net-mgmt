@@ -138,6 +138,7 @@ net-mgmt edit bridge-domain BD_Prod
 
 ### Command: `format`
 Standardizes, orders, and formats all keys, reservations, and allocations across every YAML database file in your repository.
+- **Safety Validation Constraint**: To prevent formatting errors on an unstable or misconfigured repository, the format command **will only run if the entire database is 100% valid and passes all relational integrity/overlap checks.**
 - **Key Ordering**: All keys are sorted symmetrically. The `description` key always comes first, followed by hierarchical relationship descriptors (`datacenter`, `zone`, `bridge_domain`, `environment`, `epg`), then other standard metadata fields in strict alphabetical order. Reservations and allocations are placed last.
 - **Symmetrical IP Sorting**:
   - `reservations` are sorted mathematically based on their starting IP address (from the beginning of the subnet block to the end).
@@ -178,13 +179,17 @@ The report engine looks for specific file names inside your templates directory 
 
 ---
 
-### Command: `migrate`
-Migrates an existing flat network database (which may optionally use a centralized `hierarchy.yaml` configuration) into a fully normalized, relational multi-folder structure.
+### Command: `validate`
+Runs a comprehensive relational integrity, CIDR overlap, and metadata constraint check over the entire networks database repository.
+* `--format`: Automatically formats, standardizes, and orders all keys, reservations, and allocations across all database files **if and only if** the entire database successfully validates!
+
 ```bash
-# Migrate flat database to relational database
-net-mgmt migrate --path networks --output /path/to/new-relational-db
+# Validate your networks database
+net-mgmt validate
+
+# Validate and automatically format/order all files upon successful validation
+net-mgmt validate --format
 ```
-*Note: The migration script runs an exhaustive end-to-end safety parity verification checking all resolved attributes, IP allocations, and reservations to guarantee 100% data integrity before completing.*
 
 ---
 

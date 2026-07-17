@@ -16,7 +16,8 @@ def cli():
 
 @cli.command()
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-def validate(path):
+@click.option("--format", is_flag=True, default=False, help="Format all database files if validation succeeds")
+def validate(path, format):
     """Validate all networks"""
     set_db_path(path)
     try:
@@ -25,6 +26,9 @@ def validate(path):
     except ValueError as e:
         click.echo(f"Validation Error: {e}")
         exit(1)
+
+    if format:
+        run_format(path)
 
 
 @cli.command()
@@ -651,19 +655,13 @@ def edit(entity_type, name, path):
         exit(1)
 
 
-@cli.command("format")
-@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-def format_cmd(path):
-    """Format and order all keys, reservations, and allocations in database files"""
+def run_format(path):
+    """Format and order all keys, reservations, and allocations in database files."""
     import builtins
     import io
 
     from ruamel.yaml import YAML
     from ruamel.yaml.comments import CommentedMap, CommentedSeq
-
-    if not os.path.exists(path):
-        click.echo(f"Error: Database path '{path}' does not exist.")
-        exit(1)
 
     yaml_rt = YAML(typ="rt")
     yaml_rt.preserve_quotes = True
@@ -688,7 +686,6 @@ def format_cmd(path):
     # Recursive function to format mapping structures
     def format_node(node):
         if isinstance(node, CommentedMap):
-            # Sort keys
             cmap_keys = builtins.list(node.keys())
             sorted_keys = []
 
@@ -801,6 +798,26 @@ def format_cmd(path):
             click.echo(f"Error: Failed to format file '{file_path}': {e}")
 
     click.echo(f"Format complete. Formatted: {formatted_count} file(s), Skipped: {skipped_count} file(s).")
+
+
+@cli.command("format")
+@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
+def format_cmd(path):
+    """Format and order all keys, reservations, and allocations in database files"""
+    if not os.path.exists(path):
+        click.echo(f"Error: Database path '{path}' does not exist.")
+        exit(1)
+
+    # Safety Check: First ensure the database fully validates!
+    set_db_path(path)
+    try:
+        get_database(force_reload=True)
+    except ValueError as e:
+        click.echo(f"Format Error: Cannot format because database contains validation errors: {e}")
+        exit(1)
+
+    # If it validates, proceed with formatting!
+    run_format(path)
 
 
 def main():
