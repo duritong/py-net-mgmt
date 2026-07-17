@@ -689,23 +689,28 @@ def run_format(path):
             cmap_keys = builtins.list(node.keys())
             sorted_keys = []
 
-            # description first
-            if "description" in cmap_keys:
-                sorted_keys.append("description")
+            # 1. Primary order fields
+            primary_order = [
+                "cidr",
+                "description",
+                "epg",
+                "environment",
+                "datacenter",
+                "zone",
+                "bridge_domain",
+                "bridge-domain",
+            ]
+            for field in primary_order:
+                if field in cmap_keys:
+                    sorted_keys.append(field)
 
-            # relations in hierarchical order
-            relations = ["datacenter", "zone", "bridge_domain", "bridge-domain", "environment", "epg"]
-            for r in relations:
-                if r in cmap_keys and r not in sorted_keys:
-                    sorted_keys.append(r)
-
-            # reservations and allocations last
+            # 2. Last keys
             last_keys = []
             for last_key in ["reservations", "allocations"]:
                 if last_key in cmap_keys:
                     last_keys.append(last_key)
 
-            # other keys alphabetical
+            # 3. Alphabetical other keys
             other = []
             for k in cmap_keys:
                 if k not in sorted_keys and k not in last_keys:

@@ -139,7 +139,7 @@ net-mgmt edit bridge-domain BD_Prod
 ### Command: `format`
 Standardizes, orders, and formats all keys, reservations, and allocations across every YAML database file in your repository.
 - **Safety Validation Constraint**: To prevent formatting errors on an unstable or misconfigured repository, the format command **will only run if the entire database is 100% valid and passes all relational integrity/overlap checks.**
-- **Key Ordering**: All keys are sorted symmetrically. The `description` key always comes first, followed by hierarchical relationship descriptors (`datacenter`, `zone`, `bridge_domain`, `environment`, `epg`), then other standard metadata fields in strict alphabetical order. Reservations and allocations are placed last.
+- **Key Ordering**: All keys are sorted symmetrically. Network files always start with `cidr`, followed by `description`, `epg`, `environment` (if present), other standard metadata fields in strict alphabetical order, and lastly `reservations` and `allocations`. Other relational files automatically adapt (starting with `description`, then `environment`, then alphabetical keys).
 - **Symmetrical IP Sorting**:
   - `reservations` are sorted mathematically based on their starting IP address (from the beginning of the subnet block to the end).
   - `allocations` are sorted mathematically by their starting IP address.

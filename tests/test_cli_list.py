@@ -205,6 +205,7 @@ class TestCliFormat(unittest.TestCase):
         # 1. Setup a poorly ordered yaml file with various comments
         yaml_content = """# Document Leading Comment
 vlan: 10
+cidr: 10.0.0.0/24
 # Relation Comment
 datacenter: DC1
 # Description Comment
@@ -215,7 +216,7 @@ allocations:
   - ip: 10.0.0.12 # Host 2 Comment
     hostname: host2
   # Host 1 Comment
-  - ip: 10.0.0.5
+  - ip: 10.0.0.6
     hostname: host1
 # Reservations Comment
 reservations:
@@ -242,15 +243,20 @@ reservations:
             formatted_content = f.read()
 
         # Let's inspect the exact lines to ensure:
-        # - description is first
-        # - datacenter is second (relations)
+        # - cidr is first
+        # - description is second
+        # - datacenter is third (relations)
         # - vlan/context are next (alphabetical)
         # - reservations are next (sorted by IP)
         # - allocations are last (sorted by IP)
         lines = [line.strip() for line in formatted_content.splitlines() if line.strip()]
 
-        # description should appear before datacenter
+        # cidr should appear before description
+        cidr_idx = [i for i, line in enumerate(lines) if "cidr:" in line][0]
         desc_idx = [i for i, line in enumerate(lines) if "description:" in line][0]
+        self.assertTrue(cidr_idx < desc_idx)
+
+        # description should appear before datacenter
         dc_idx = [i for i, line in enumerate(lines) if "datacenter:" in line][0]
         self.assertTrue(desc_idx < dc_idx)
 
@@ -324,16 +330,16 @@ description: "Net 2"
         self.assertIn("Successfully validated 2 networks.", result_val_ok.output)
         self.assertIn("Format complete. Formatted: 1 file(s)", result_val_ok.output)
 
-        # 6. Read net2.yaml and verify that it was formatted (description comes first, then datacenter, then cidr!)
+        # 6. Read net2.yaml and verify that it was formatted (cidr comes first, then description, then datacenter!)
         with open(os.path.join(networks_dir, "net2.yaml"), "r") as f:
             net2_content = f.read()
 
         lines = [line.strip() for line in net2_content.splitlines() if line.strip()]
+        cidr_idx = [i for i, line in enumerate(lines) if "cidr:" in line][0]
         desc_idx = [i for i, line in enumerate(lines) if "description:" in line][0]
         dc_idx = [i for i, line in enumerate(lines) if "datacenter:" in line][0]
-        cidr_idx = [i for i, line in enumerate(lines) if "cidr:" in line][0]
+        self.assertTrue(cidr_idx < desc_idx)
         self.assertTrue(desc_idx < dc_idx)
-        self.assertTrue(dc_idx < cidr_idx)
 
 
 if __name__ == "__main__":
