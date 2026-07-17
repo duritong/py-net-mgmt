@@ -1,4 +1,5 @@
 import ipaddress
+import os
 
 import click
 from rich.console import Console
@@ -439,6 +440,71 @@ def generate_markdown(path, output, templates):
 
     generate_markdown_report(networks, output, templates_dir=templates)
     click.echo(f"Markdown reports generated in {output}")
+
+
+@cli.command("apply-template")
+@click.option("--template", "-t", required=True, help="Path to the YAML reservation template file (REQUIRED)")
+@click.option("--network", "-n", default=None, help="Name of specific network to apply (applies globally if omitted)")
+@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
+def apply_template(template, network, path):
+    """Apply relative reservation template to matching networks"""
+    import yaml
+
+    if not os.path.exists(template):
+        click.echo(f"Error: Template file '{template}' not found.")
+        exit(1)
+
+    try:
+        with open(template, "r", encoding="utf-8") as f:
+            template_data = yaml.safe_load(f) or {}
+    except Exception as e:
+        click.echo(f"Error: Failed to parse template YAML file: {e}")
+        exit(1)
+
+    set_db_path(path)
+    try:
+        networks = get_database()
+    except ValueError as e:
+        click.echo(f"Validation Error: {e}")
+        exit(1)
+
+    target_networks = []
+    if network:
+        net = next((n for n in networks if n.name == network), None)
+        if not net:
+            click.echo(f"Error: Network '{network}' not found.")
+            exit(1)
+        target_networks.append(net)
+    else:
+        req_len = template_data.get("required_prefix_len") or template_data.get("required_prefix_length")
+        if req_len is not None:
+            target_networks = [n for n in networks if n.cidr.prefixlen == int(req_len)]
+            if not target_networks:
+                click.echo(f"No networks found matching template prefix length /{req_len}.")
+                return
+        else:
+            target_networks = networks
+
+    click.echo(f"Applying template '{template}' to {len(target_networks)} target network(s)...")
+
+    import sys
+
+    console = Console(file=sys.stdout)
+    for net in target_networks:
+        try:
+            res = net.apply_reservation_template(template_data)
+            console.print(f"\nNetwork: [bold cyan]{net.name}[/bold cyan] ({net.cidr})")
+            if res["applied"]:
+                console.print(f"  [bold green]Applied:[/bold green] {', '.join(res['applied'])}")
+            if res["skipped"]:
+                console.print(f"  [bold yellow]Skipped (Idempotent):[/bold yellow] {', '.join(res['skipped'])}")
+            if res["failed"]:
+                console.print("  [bold red]Failed:[/bold red]")
+                for rid, err in res["failed"].items():
+                    console.print(f"    - {rid}: [red]{err}[/red]")
+        except ValueError as e:
+            console.print(f"\nNetwork: [bold cyan]{net.name}[/bold cyan] ({net.cidr})")
+            console.print(f"  [bold red]Error:[/bold red] [red]{e}[/red]")
 
 
 def main():

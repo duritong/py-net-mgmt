@@ -45,6 +45,21 @@ net-mgmt get-vlans --environment dev --zone Trusted
 
 ---
 
+### Command: `apply-template`
+Applies a relative reservation template (YAML file containing offsets and required prefix lengths) to matching networks. It performs dynamic relative base-IP math to carve up networks, supports safe idempotency, and runs partial transactional rollbacks on individual pool validation conflicts.
+* If `--network` is specified, it applies to that specific network.
+* If `--network` is omitted, it automatically scans the entire database, matches all networks whose prefix length matches the template's required prefix, and applies the template to all of them!
+
+```bash
+# Apply a relative template to a specific network
+net-mgmt apply-template --template templates/web-tier-22.yaml --network backend_net
+
+# Apply a template globally to all matching /22 networks in the database
+net-mgmt apply-template --template templates/web-tier-22.yaml
+```
+
+---
+
 ### Command: `generate-markdown`
 Renders the complete networks database into an output directory using decoupled, pluggable Jinja2 templates:
 - Generates a central `README.md` index file containing a sleek, hierarchical nested bullet list representing your network topology.
@@ -273,4 +288,12 @@ Enables dynamic, first-class querying and filtering of networks by any of their 
 {% for net in storage_nets %}
 - {{ net.name }} ({{ net.cidr }}) — *{{ net.description }}*
 {% endfor %}
+```
+
+#### Filter: `apply_reservation_template`
+Applies a relative reservation template (YAML file containing relative CIDR offsets) to a network dynamically inside a template:
+```jinja
+{# Apply our standard /24 web tier template to this network on the fly #}
+{% set results = network | apply_reservation_template('templates/web-tier-24.yaml') %}
+Applied: {{ results.applied | join(', ') }}
 ```

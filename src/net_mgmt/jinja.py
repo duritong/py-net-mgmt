@@ -1,4 +1,5 @@
 import ipaddress
+import os
 from typing import Any, List, Optional
 
 from .core import Allocation, Network
@@ -279,6 +280,29 @@ def query_networks(value: Any, filters: Optional[dict] = None, **kwargs) -> List
     return core_query_networks(networks, filters=filters, **kwargs)
 
 
+def jinja_apply_reservation_template(value: Any, template_path: str) -> dict:
+    """
+    Apply a relative reservation template (YAML file) to a network inside Jinja.
+    Usage:
+        network | apply_reservation_template('path/to/template.yaml')
+    """
+    if not isinstance(value, Network):
+        return {"applied": [], "skipped": [], "failed": {"error": "Value must be a Network object"}}
+
+    import yaml
+
+    if not os.path.exists(template_path):
+        return {"applied": [], "skipped": [], "failed": {"error": f"Template file '{template_path}' not found"}}
+
+    try:
+        with open(template_path, "r", encoding="utf-8") as f:
+            template_data = yaml.safe_load(f) or {}
+    except Exception as e:
+        return {"applied": [], "skipped": [], "failed": {"error": f"Failed to parse template YAML: {e}"}}
+
+    return value.apply_reservation_template(template_data)
+
+
 def register_filters(env):
     """Register filters to a Jinja2 environment."""
     env.filters["network_by_name"] = network_by_name
@@ -296,5 +320,6 @@ def register_filters(env):
     env.filters["datacenter_by_name"] = datacenter_by_name
     env.filters["network_containing_ip"] = network_containing_ip
     env.filters["query_networks"] = query_networks
+    env.filters["apply_reservation_template"] = jinja_apply_reservation_template
     env.filters["get_networks"] = get_database  # Keep for compatibility if needed, but globals is better
     env.globals["get_networks"] = get_database

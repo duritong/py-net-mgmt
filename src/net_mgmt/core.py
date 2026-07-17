@@ -503,6 +503,7 @@ class Network:
         reservation = Reservation(id=id, cidr=cidr, comment=comment, allocatable=allocatable)
         self.reservations.append(reservation)
         self.validate()
+        self.save()
 
     def get_next_free_ip(self, reservation_id: Optional[str] = None) -> ipaddress.IPv4Address:
         target_reservations = []
@@ -745,6 +746,92 @@ class Network:
         if self.allocations:
             res["allocations"] = [a.to_dict for a in self.allocations]
         return res
+
+    def apply_reservation_template(self, template_data: dict) -> dict:
+        """
+        Apply a reservation template (relative CIDR offset math) to this network.
+        Returns a dict of results summarizing applied, skipped, and failed reservations.
+        """
+        # 1. Verify required prefix length
+        req_len = template_data.get("required_prefix_len") or template_data.get("required_prefix_length")
+        if req_len is not None and self.cidr.prefixlen != int(req_len):
+            raise ValueError(
+                f"{self._error_prefix}Prefix length {self.cidr.prefixlen} "
+                f"does not match template required prefix length {req_len}"
+            )
+
+        applied = []
+        skipped = []
+        failed = {}
+
+        base_ip = self.cidr.network_address
+        template_res = template_data.get("reservations") or []
+
+        for tr in template_res:
+            res_id = tr.get("id")
+            offset_cidr = tr.get("cidr_offset") or tr.get("cidr_offest")
+            comment = tr.get("comment", "")
+            allocatable = tr.get("allocatable", False)
+
+            if not res_id or not offset_cidr:
+                continue
+
+            # Parse offset and prefixlen
+            try:
+                if "/" in offset_cidr:
+                    offset_ip, prefix_len = offset_cidr.split("/")
+                else:
+                    offset_ip, prefix_len = offset_cidr, "32"
+                offset_int = int(ipaddress.ip_address(offset_ip))
+            except Exception as e:
+                failed[res_id] = f"Invalid cidr_offset '{offset_cidr}': {e}"
+                continue
+
+            # Calculate resolved IP and CIDR
+            try:
+                resolved_ip = base_ip + offset_int
+                resolved_cidr_str = f"{resolved_ip}/{prefix_len}"
+                resolved_cidr = ipaddress.ip_network(resolved_cidr_str, strict=False)
+            except Exception as e:
+                failed[res_id] = f"Could not resolve CIDR for offset '{offset_cidr}': {e}"
+                continue
+
+            # Verify that the resolved CIDR falls completely inside the parent subnet
+            if not resolved_cidr.subnet_of(self.cidr):
+                failed[res_id] = f"Resolved CIDR {resolved_cidr} is not within parent subnet {self.cidr}"
+                continue
+
+            # Idempotency check: see if we already have this reservation
+            existing_match = False
+            for r in self.reservations:
+                if r.id == res_id and str(r.cidr) == str(resolved_cidr):
+                    existing_match = True
+                    break
+
+            if existing_match:
+                skipped.append(res_id)
+                continue
+
+            # Try to add this reservation temporarily and validate
+            original_reservations = self.reservations.copy()
+            try:
+                self.add_reservation(
+                    id=res_id,
+                    cidr=str(resolved_cidr),
+                    comment=comment,
+                    allocatable=allocatable,
+                )
+                applied.append(res_id)
+            except ValueError as e:
+                # Validation failed, rollback
+                self.reservations = original_reservations
+                failed[res_id] = str(e)
+
+        return {
+            "applied": applied,
+            "skipped": skipped,
+            "failed": failed,
+        }
 
 
 def validate_network_list(networks: List[Network]):
