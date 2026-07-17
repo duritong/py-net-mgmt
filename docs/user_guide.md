@@ -11,6 +11,31 @@ The CLI main entrypoint is `net-mgmt`. You can configure the directory containin
 ### General Options
 - `--path`: Override the path to the networks directory (defaults to `networks`).
 
+### Shell Completion
+Since `net-mgmt` is built using the standard Python Click library, it natively supports complete tab-completion for all commands, options, and directories out-of-the-box.
+
+To enable auto-completion for your active shell, run or add the corresponding command to your shell configuration file:
+
+#### For Bash
+Add this to your `~/.bashrc` or `~/.bash_profile`:
+```bash
+eval "$(_NET_MGMT_COMPLETE=bash_source net-mgmt)"
+```
+
+#### For Zsh
+Add this to your `~/.zshrc`:
+```zsh
+eval "$(_NET_MGMT_COMPLETE=zsh_source net-mgmt)"
+```
+
+#### For Fish
+Add this to your `~/.config/fish/config.fish`:
+```fish
+eval (env _NET_MGMT_COMPLETE=fish_source net-mgmt)
+```
+
+Restart your terminal or run `source ~/.bashrc` to instantly activate auto-completion!
+
 ---
 
 ### Command: `list`
