@@ -668,9 +668,9 @@ def run_format(path):
     yaml_rt.indent(mapping=2, sequence=4, offset=2)
     yaml_rt.width = 120
 
-    # Helper to sort sequence of mapping items by IP
-    def get_sort_key_ip(item, field_name):
-        val = item.get(field_name)
+    # Helper to sort sequence of mapping items by IP (supporting both direct 'ip' or 'cidr' keys)
+    def get_item_start_ip(item):
+        val = item.get("cidr") or item.get("ip")
         if not val:
             comment_val = item.get("comment", "")
             return (ipaddress.ip_address("255.255.255.255"), comment_val)
@@ -733,17 +733,12 @@ def run_format(path):
             return new_map
 
         elif isinstance(node, CommentedSeq) or isinstance(node, builtins.list):
-            # If this is reservations list or allocations list, we sort the elements!
+            # If this is reservations list or allocations list, we sort the elements symmetrically!
             if len(node) > 0 and isinstance(node[0], CommentedMap):
-                # Check reservations
-                if "cidr" in node[0] and "id" in node[0]:
-                    node = sorted(node, key=lambda x: get_sort_key_ip(x, "cidr"))
-                # Check allocations (allocations have either ip or cidr)
-                elif "ip" in node[0] or "cidr" in node[0]:
-                    if "ip" in node[0]:
-                        node = sorted(node, key=lambda x: get_sort_key_ip(x, "ip"))
-                    else:
-                        node = sorted(node, key=lambda x: get_sort_key_ip(x, "cidr"))
+                is_reservations = "cidr" in node[0] and "id" in node[0]
+                is_allocations = "ip" in node[0] or "cidr" in node[0]
+                if is_reservations or is_allocations:
+                    node = sorted(node, key=get_item_start_ip)
 
             # Recursively format sequence elements
             new_seq = CommentedSeq()

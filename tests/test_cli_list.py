@@ -213,8 +213,9 @@ description: "Test Network Description"
 context: production
 # Allocations Comment
 allocations:
-  - ip: 10.0.0.12 # Host 2 Comment
+  - cidr: 10.0.0.12/30 # Host 2 Comment
     hostname: host2
+    comment: "Subnet allocation 2"
   # Host 1 Comment
   - ip: 10.0.0.6
     hostname: host1
