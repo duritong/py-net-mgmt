@@ -920,6 +920,17 @@ def query_networks(networks: List[Network], filters: Optional[dict] = None, **kw
                 if not net.description or val.lower() not in net.description.lower():
                     match = False
                     break
+            elif key == "cidr":
+                # Special case: cidr matches either as string or parsed ip_network object
+                try:
+                    search_net = ipaddress.ip_network(str(val), strict=False)
+                    if net.cidr != search_net:
+                        match = False
+                        break
+                except ValueError:
+                    if str(net.cidr) != str(val):
+                        match = False
+                        break
             else:
                 # Standard attributes do exact case-insensitive matching (or direct matches)
                 attr_val = getattr(net, key, None)

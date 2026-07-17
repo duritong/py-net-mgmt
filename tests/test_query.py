@@ -102,6 +102,19 @@ class TestQuery(unittest.TestCase):
         res3 = query_networks(nets, description="front", datacenter="DC2")
         self.assertEqual(len(res3), 0)
 
+        # 4. CIDR exact string match -> n2
+        res4 = query_networks(nets, cidr="10.0.2.0/24")
+        self.assertEqual(len(res4), 1)
+        self.assertEqual(res4[0].name, "n2")
+
+        # 5. CIDR native ip_network object match -> n3
+        import ipaddress
+
+        search_obj = ipaddress.ip_network("10.0.3.0/24")
+        res5 = query_networks(nets, cidr=search_obj)
+        self.assertEqual(len(res5), 1)
+        self.assertEqual(res5[0].name, "n3")
+
     def test_hierarchy_inheritance(self):
         import os
         import shutil

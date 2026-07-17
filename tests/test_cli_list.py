@@ -88,6 +88,16 @@ default_mtu: 1500
         self.assertEqual(result4.exit_code, 0)
         self.assertIn("No matching networks found.", result4.output)
 
+        # 5. Matching CIDR -> should list
+        result5 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--cidr", "192.168.100.0/24"])
+        self.assertEqual(result5.exit_code, 0)
+        self.assertIn("test_net", result5.output)
+
+        # 6. Non-matching CIDR -> should output No matching networks found
+        result6 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--cidr", "10.0.0.0/24"])
+        self.assertEqual(result6.exit_code, 0)
+        self.assertIn("No matching networks found.", result6.output)
+
 
 class TestCliListEmpty(unittest.TestCase):
     def setUp(self):
