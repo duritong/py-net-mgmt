@@ -98,6 +98,22 @@ net-mgmt apply-template --template templates/web-tier-22.yaml --network backend_
 net-mgmt apply-template --template templates/web-tier-22.yaml
 ```
 
+#### Relative Reservation Template Structure
+A reservation template is a standard YAML file defining relative IP offset subnets. Because it uses relative offsets, the same template file can be cleanly applied to multiple networks across different base IP subnets:
+
+```yaml
+required_prefix_length: 25   # Apply only to networks matching prefix len /25 (alias: required_prefix_len)
+reservations:
+  - id: hosts
+    cidr_offset: "0.0.0.0/27"   # CIDR offset relative to network base address
+    comment: "Usable IP pool for client hosts"
+    allocatable: true
+  - id: tests
+    cidr_offset: "0.0.0.64/27"  # Offset 64, size /27 (covers .64 to .95 of network)
+    comment: "Reserved IP pool for test benches"
+    allocatable: false
+```
+
 ---
 
 ### Command: `generate-markdown`
