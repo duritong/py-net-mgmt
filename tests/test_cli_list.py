@@ -54,6 +54,18 @@ default_mtu: 1500
         self.assertIn("1500", output)
         self.assertIn("Test Network Description", output)
 
+    def test_list_with_description_filter(self):
+        # 1. Matching filter (case-insensitive substring) -> should list the network
+        result = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--description", "network"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("test_net", result.output)
+        self.assertIn("Test Network Description", result.output)
+
+        # 2. Non-matching filter -> should output No matching networks found
+        result2 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--description", "nonexistent"])
+        self.assertEqual(result2.exit_code, 0)
+        self.assertIn("No matching networks found.", result2.output)
+
 
 class TestCliListEmpty(unittest.TestCase):
     def setUp(self):

@@ -251,6 +251,56 @@ def network_containing_ip(value: Any, ip_str: Optional[str] = None) -> Optional[
     return None
 
 
+def query_networks(value: Any, filters: Optional[dict] = None, **kwargs) -> List[Network]:
+    """
+    Query and filter networks by attributes.
+    Usage:
+        networks | query_networks(description='Storage', environment='production')
+        networks | query_networks({'description': 'Storage'})
+    """
+    networks = _ensure_networks(value)
+
+    # Merge filters dict with kwargs
+    query_params = {}
+    if isinstance(filters, dict):
+        query_params.update(filters)
+    query_params.update(kwargs)
+
+    if not query_params:
+        return networks
+
+    filtered = []
+    for net in networks:
+        match = True
+        for key, val in query_params.items():
+            if val is None:
+                continue
+
+            # Special case: description does substring matching
+            if key == "description":
+                if not net.description or val.lower() not in net.description.lower():
+                    match = False
+                    break
+            else:
+                # Standard attributes do exact case-insensitive matching (or direct matches)
+                attr_val = getattr(net, key, None)
+                if attr_val is None:
+                    match = False
+                    break
+
+                if isinstance(attr_val, str) and isinstance(val, str):
+                    if attr_val.lower() != val.lower():
+                        match = False
+                        break
+                elif attr_val != val:
+                    match = False
+                    break
+        if match:
+            filtered.append(net)
+
+    return filtered
+
+
 def register_filters(env):
     """Register filters to a Jinja2 environment."""
     env.filters["network_by_name"] = network_by_name
@@ -267,5 +317,6 @@ def register_filters(env):
     env.filters["zone_by_name"] = zone_by_name
     env.filters["datacenter_by_name"] = datacenter_by_name
     env.filters["network_containing_ip"] = network_containing_ip
+    env.filters["query_networks"] = query_networks
     env.filters["get_networks"] = get_database  # Keep for compatibility if needed, but globals is better
     env.globals["get_networks"] = get_database

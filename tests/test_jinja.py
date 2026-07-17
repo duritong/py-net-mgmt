@@ -194,6 +194,33 @@ class TestJinjaRendering(unittest.TestCase):
         template3 = self.env.from_string("{{ ('192.168.1.1' | network_containing_ip) is none }}")
         self.assertEqual(template3.render(), "True")
 
+    @patch("src.net_mgmt.jinja.get_database")
+    def test_query_networks_filter(self, mock_get_db):
+        nets = [
+            Network(name="n1", cidr="10.0.1.0/24", description="Web frontend"),
+            Network(name="n2", cidr="10.0.2.0/24", description="Database backend"),
+            Network(name="n3", cidr="10.0.3.0/24", description="Storage cluster"),
+        ]
+        mock_get_db.return_value = nets
+
+        # Filter by description containing 'backend' -> n2
+        template1 = self.env.from_string(
+            "{{ (networks | query_networks(description='backend')) | map(attribute='name') | join(',') }}"
+        )
+        self.assertEqual(template1.render(networks=nets), "n2")
+
+        # Filter by description containing 'frontend' -> n1
+        template2 = self.env.from_string(
+            "{{ (networks | query_networks(description='frontend')) | map(attribute='name') | join(',') }}"
+        )
+        self.assertEqual(template2.render(networks=nets), "n1")
+
+        # Filter by description containing 'cluster' -> n3
+        template3 = self.env.from_string(
+            "{{ (networks | query_networks(description='cluster')) | map(attribute='name') | join(',') }}"
+        )
+        self.assertEqual(template3.render(networks=nets), "n3")
+
 
 if __name__ == "__main__":
     unittest.main()

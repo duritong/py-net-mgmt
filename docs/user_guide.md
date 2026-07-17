@@ -14,9 +14,13 @@ The CLI main entrypoint is `net-mgmt`. You can configure the directory containin
 ---
 
 ### Command: `list`
-Lists all networks in the database, displaying their core attributes (Name, CIDR, Context, Datacenter, Zone, Environment, MTU, and Description) in a clean terminal table.
+Lists all networks in the database, displaying their core attributes (Name, CIDR, Context, Datacenter, Zone, Environment, MTU, and Description) in a clean terminal table. Features a case-insensitive substring filter for descriptions.
 ```bash
+# List all networks
 net-mgmt list
+
+# List only networks whose description contains 'Storage' (case-insensitive substring)
+net-mgmt list --description Storage
 ```
 
 ---
@@ -259,4 +263,14 @@ BD Zone: {{ bd.zone }}
 {# Retrieve Environment metadata (resolving transitively) #}
 {% set env = epg.environment | environment_by_name %}
 Env Timeservers: {{ env.timeservers | join(', ') }}
+```
+
+#### Filter: `query_networks`
+Enables dynamic, first-class querying and filtering of networks by any of their attributes, including description substring searches:
+```jinja
+{# Get all networks whose description contains 'Storage' and belong to EPG_App #}
+{% set storage_nets = get_networks() | query_networks(description='Storage', epg='EPG_App') %}
+{% for net in storage_nets %}
+- {{ net.name }} ({{ net.cidr }}) — *{{ net.description }}*
+{% endfor %}
 ```

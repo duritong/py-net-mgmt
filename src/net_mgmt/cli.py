@@ -28,7 +28,8 @@ def validate(path):
 
 @cli.command()
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-def list(path):
+@click.option("--description", "-d", default=None, help="Filter networks by description (case-insensitive substring)")
+def list(path, description):
     """List all available networks"""
     set_db_path(path)
     try:
@@ -39,6 +40,15 @@ def list(path):
 
     if not networks:
         click.echo("No networks found.")
+        return
+
+    # Apply description filter if provided
+    if description:
+        description_lower = description.lower()
+        networks = [n for n in networks if n.description and description_lower in n.description.lower()]
+
+    if not networks:
+        click.echo("No matching networks found.")
         return
 
     import sys
