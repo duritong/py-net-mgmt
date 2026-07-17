@@ -698,7 +698,6 @@ def run_format(path):
                 "datacenter",
                 "zone",
                 "bridge_domain",
-                "bridge-domain",
             ]
             for field in primary_order:
                 if field in cmap_keys:
