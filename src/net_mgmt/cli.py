@@ -31,6 +31,7 @@ def validate(path):
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
 @click.option("--description", "-d", default=None, help="Filter networks by description (case-insensitive substring)")
 @click.option("--cidr", default=None, help="Filter networks by CIDR (string or exact subnet)")
+@click.option("--ip", default=None, help="Filter networks containing this IP address")
 @click.option("--vlan", "-v", type=int, default=None, help="Filter networks by VLAN ID")
 @click.option("--environment", "-e", default=None, help="Filter networks by Environment name")
 @click.option("--datacenter", "--dc", default=None, help="Filter networks by Datacenter name")
@@ -38,7 +39,7 @@ def validate(path):
 @click.option("--epg", default=None, help="Filter networks by EPG name")
 @click.option("--bridge-domain", "--bd", default=None, help="Filter networks by Bridge Domain name")
 @click.option("--context", "-c", default=None, help="Filter networks by Context name")
-def list(path, description, cidr, vlan, environment, datacenter, zone, epg, bridge_domain, context):
+def list(path, description, cidr, ip, vlan, environment, datacenter, zone, epg, bridge_domain, context):
     """List available networks with coordinate filtering"""
     set_db_path(path)
     try:
@@ -57,6 +58,7 @@ def list(path, description, cidr, vlan, environment, datacenter, zone, epg, brid
     filters = {
         "description": description,
         "cidr": cidr,
+        "ip": ip,
         "vlan": vlan,
         "environment": environment,
         "datacenter": datacenter,

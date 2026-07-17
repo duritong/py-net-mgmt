@@ -931,6 +931,16 @@ def query_networks(networks: List[Network], filters: Optional[dict] = None, **kw
                     if str(net.cidr) != str(val):
                         match = False
                         break
+            elif key == "ip":
+                # Special case: check if the network CIDR contains this IP address (string or object)
+                try:
+                    search_ip = ipaddress.ip_address(str(val))
+                    if search_ip not in net.cidr:
+                        match = False
+                        break
+                except ValueError:
+                    match = False
+                    break
             else:
                 # Standard attributes do exact case-insensitive matching (or direct matches)
                 attr_val = getattr(net, key, None)

@@ -98,6 +98,16 @@ default_mtu: 1500
         self.assertEqual(result6.exit_code, 0)
         self.assertIn("No matching networks found.", result6.output)
 
+        # 7. Matching IP containment -> should list
+        result7 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--ip", "192.168.100.50"])
+        self.assertEqual(result7.exit_code, 0)
+        self.assertIn("test_net", result7.output)
+
+        # 8. Non-matching IP containment -> should output No matching networks found
+        result8 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--ip", "10.0.1.100"])
+        self.assertEqual(result8.exit_code, 0)
+        self.assertIn("No matching networks found.", result8.output)
+
 
 class TestCliListEmpty(unittest.TestCase):
     def setUp(self):

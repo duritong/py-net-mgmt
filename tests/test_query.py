@@ -115,6 +115,17 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(len(res5), 1)
         self.assertEqual(res5[0].name, "n3")
 
+        # 6. IP containment string match -> n2
+        res6 = query_networks(nets, ip="10.0.2.50")
+        self.assertEqual(len(res6), 1)
+        self.assertEqual(res6[0].name, "n2")
+
+        # 7. IP containment native ip_address object match -> n1
+        search_ip = ipaddress.ip_address("10.0.1.100")
+        res7 = query_networks(nets, ip=search_ip)
+        self.assertEqual(len(res7), 1)
+        self.assertEqual(res7[0].name, "n1")
+
     def test_hierarchy_inheritance(self):
         import os
         import shutil
