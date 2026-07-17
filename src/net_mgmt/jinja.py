@@ -2,6 +2,7 @@ import ipaddress
 from typing import Any, List, Optional
 
 from .core import Allocation, Network
+from .core import query_networks as core_query_networks
 from .db import get_cached_entities, get_database
 
 
@@ -259,46 +260,7 @@ def query_networks(value: Any, filters: Optional[dict] = None, **kwargs) -> List
         networks | query_networks({'description': 'Storage'})
     """
     networks = _ensure_networks(value)
-
-    # Merge filters dict with kwargs
-    query_params = {}
-    if isinstance(filters, dict):
-        query_params.update(filters)
-    query_params.update(kwargs)
-
-    if not query_params:
-        return networks
-
-    filtered = []
-    for net in networks:
-        match = True
-        for key, val in query_params.items():
-            if val is None:
-                continue
-
-            # Special case: description does substring matching
-            if key == "description":
-                if not net.description or val.lower() not in net.description.lower():
-                    match = False
-                    break
-            else:
-                # Standard attributes do exact case-insensitive matching (or direct matches)
-                attr_val = getattr(net, key, None)
-                if attr_val is None:
-                    match = False
-                    break
-
-                if isinstance(attr_val, str) and isinstance(val, str):
-                    if attr_val.lower() != val.lower():
-                        match = False
-                        break
-                elif attr_val != val:
-                    match = False
-                    break
-        if match:
-            filtered.append(net)
-
-    return filtered
+    return core_query_networks(networks, filters=filters, **kwargs)
 
 
 def register_filters(env):

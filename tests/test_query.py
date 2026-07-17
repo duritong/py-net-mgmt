@@ -79,6 +79,29 @@ class TestQuery(unittest.TestCase):
         # Query all dev vlans
         self.assertEqual(query_vlans(nets, environment="dev"), [50])
 
+    def test_query_networks(self):
+        from net_mgmt.core import query_networks
+
+        net1 = Network(name="n1", cidr="10.0.1.0/24", description="Web frontend", datacenter="DC1", zone="Z1")
+        net2 = Network(name="n2", cidr="10.0.2.0/24", description="Database backend", datacenter="DC1", zone="Z2")
+        net3 = Network(name="n3", cidr="10.0.3.0/24", description="Storage cluster", datacenter="DC2", zone="Z1")
+
+        nets = [net1, net2, net3]
+
+        # 1. Substring query on description (case-insensitive) -> n2
+        res1 = query_networks(nets, description="BACKEND")
+        self.assertEqual(len(res1), 1)
+        self.assertEqual(res1[0].name, "n2")
+
+        # 2. Substring + attribute exact match -> n1
+        res2 = query_networks(nets, description="front", datacenter="DC1")
+        self.assertEqual(len(res2), 1)
+        self.assertEqual(res2[0].name, "n1")
+
+        # 3. Non-matching attribute -> empty
+        res3 = query_networks(nets, description="front", datacenter="DC2")
+        self.assertEqual(len(res3), 0)
+
     def test_hierarchy_inheritance(self):
         import os
         import shutil
