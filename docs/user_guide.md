@@ -39,10 +39,15 @@ Restart your terminal or run `source ~/.bashrc` to instantly activate auto-compl
 ---
 
 ### Command: `list`
-Lists all networks in the database, displaying their core attributes (Name, CIDR, Context, Datacenter, Zone, Environment, MTU, and Description) in a clean terminal table. Features a case-insensitive substring filter for descriptions.
+Lists all networks in the database, displaying their core attributes (Name, CIDR, Context, Datacenter, Zone, Environment, MTU, and Description) in a clean terminal table. Features coordinate filters and column wrap configuration.
+* `--no-wrap`: Disables column text wrapping and truncation, forcing each network row to output as a single, fully expanded line (perfect for piping/scripting or displaying long names).
+
 ```bash
 # List all networks
 net-mgmt list
+
+# List networks with column text wrapping and truncation disabled
+net-mgmt list --no-wrap
 
 # List only networks whose description contains 'Storage' (case-insensitive substring)
 net-mgmt list --description Storage

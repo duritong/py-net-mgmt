@@ -108,6 +108,12 @@ default_mtu: 1500
         self.assertEqual(result8.exit_code, 0)
         self.assertIn("No matching networks found.", result8.output)
 
+    def test_list_with_no_wrap(self):
+        # Assert the CLI accepts the --no-wrap flag without errors
+        result = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--no-wrap"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("test_net", result.output)
+
 
 class TestCliListEmpty(unittest.TestCase):
     def setUp(self):

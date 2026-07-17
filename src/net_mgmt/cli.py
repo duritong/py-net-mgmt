@@ -39,7 +39,8 @@ def validate(path):
 @click.option("--epg", default=None, help="Filter networks by EPG name")
 @click.option("--bridge-domain", "--bd", default=None, help="Filter networks by Bridge Domain name")
 @click.option("--context", "-c", default=None, help="Filter networks by Context name")
-def list(path, description, cidr, ip, vlan, environment, datacenter, zone, epg, bridge_domain, context):
+@click.option("--no-wrap", is_flag=True, default=False, help="Do not wrap or truncate text inside table columns")
+def list(path, description, cidr, ip, vlan, environment, datacenter, zone, epg, bridge_domain, context, no_wrap):
     """List available networks with coordinate filtering"""
     set_db_path(path)
     try:
@@ -75,17 +76,23 @@ def list(path, description, cidr, ip, vlan, environment, datacenter, zone, epg, 
 
     import sys
 
-    width = 120 if not sys.stdout.isatty() else None
+    if no_wrap:
+        width = 9999
+    elif not sys.stdout.isatty():
+        width = 120
+    else:
+        width = None
+
     console = Console(width=width)
     table = Table()
-    table.add_column("Name", style="cyan")
-    table.add_column("CIDR", style="green")
-    table.add_column("Context", style="magenta")
-    table.add_column("Datacenter", style="yellow")
-    table.add_column("Zone", style="blue")
-    table.add_column("Environment", style="white")
-    table.add_column("MTU", justify="right")
-    table.add_column("Description")
+    table.add_column("Name", style="cyan", no_wrap=no_wrap)
+    table.add_column("CIDR", style="green", no_wrap=no_wrap)
+    table.add_column("Context", style="magenta", no_wrap=no_wrap)
+    table.add_column("Datacenter", style="yellow", no_wrap=no_wrap)
+    table.add_column("Zone", style="blue", no_wrap=no_wrap)
+    table.add_column("Environment", style="white", no_wrap=no_wrap)
+    table.add_column("MTU", justify="right", no_wrap=no_wrap)
+    table.add_column("Description", no_wrap=no_wrap)
 
     for net in networks:
         desc = net.description or ""
