@@ -136,6 +136,22 @@ net-mgmt edit bridge-domain BD_Prod
 
 ---
 
+### Command: `format`
+Standardizes, orders, and formats all keys, reservations, and allocations across every YAML database file in your repository.
+- **Key Ordering**: All keys are sorted symmetrically. The `description` key always comes first, followed by hierarchical relationship descriptors (`datacenter`, `zone`, `bridge_domain`, `environment`, `epg`), then other standard metadata fields in strict alphabetical order. Reservations and allocations are placed last.
+- **Symmetrical IP Sorting**:
+  - `reservations` are sorted mathematically based on their starting IP address (from the beginning of the subnet block to the end).
+  - `allocations` are sorted mathematically by their starting IP address.
+- **Comment Preservation**: Built using `ruamel.yaml` in round-trip mode, fully preserving all line-level and inline/end-of-line comments.
+- **Strict Idempotency**: Automatically skips writing to disk if the file is already formatted, preventing unnecessary git edits or file modification times (`mtime`) cache invalidations.
+
+```bash
+# Format and order all YAML files inside your networks database
+net-mgmt format
+```
+
+---
+
 ### Command: `generate-markdown`
 Renders the complete networks database into an output directory using decoupled, pluggable Jinja2 templates:
 - Generates a central `README.md` index file containing a sleek, hierarchical nested bullet list representing your network topology.

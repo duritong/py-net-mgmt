@@ -193,5 +193,99 @@ class TestCliEdit(unittest.TestCase):
             mock_run.assert_called_once_with(["vim", epg_file], check=True)
 
 
+class TestCliFormat(unittest.TestCase):
+    def setUp(self):
+        self.runner = CliRunner()
+        self.test_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    def test_format_ordering_and_comment_preservation(self):
+        # 1. Setup a poorly ordered yaml file with various comments
+        yaml_content = """# Document Leading Comment
+vlan: 10
+# Relation Comment
+datacenter: DC1
+# Description Comment
+description: "Test Network Description"
+context: production
+# Allocations Comment
+allocations:
+  - ip: 10.0.0.12 # Host 2 Comment
+    hostname: host2
+  # Host 1 Comment
+  - ip: 10.0.0.5
+    hostname: host1
+# Reservations Comment
+reservations:
+  - id: pool2
+    cidr: 10.0.0.64/28
+  - id: pool1
+    cidr: 10.0.0.0/28
+"""
+        networks_dir = os.path.join(self.test_dir, "networks")
+        os.makedirs(networks_dir)
+        net_file = os.path.join(networks_dir, "test_net.yaml")
+        with open(net_file, "w", encoding="utf-8") as f:
+            f.write(yaml_content)
+
+        # 2. Run format for the first time -> should format 1 file
+        result1 = self.runner.invoke(cli, ["format", "--path", networks_dir])
+        self.assertEqual(result1.exit_code, 0)
+        self.assertIn("Formatted: 1 file(s)", result1.output)
+
+        # 3. Read the formatted content and verify ordering
+        with open(net_file, "r", encoding="utf-8") as f:
+            formatted_content = f.read()
+
+        # Let's inspect the exact lines to ensure:
+        # - description is first
+        # - datacenter is second (relations)
+        # - vlan/context are next (alphabetical)
+        # - reservations are next (sorted by IP)
+        # - allocations are last (sorted by IP)
+        lines = [line.strip() for line in formatted_content.splitlines() if line.strip()]
+
+        # description should appear before datacenter
+        desc_idx = [i for i, line in enumerate(lines) if "description:" in line][0]
+        dc_idx = [i for i, line in enumerate(lines) if "datacenter:" in line][0]
+        self.assertTrue(desc_idx < dc_idx)
+
+        # datacenter should appear before vlan
+        vlan_idx = [i for i, line in enumerate(lines) if "vlan:" in line][0]
+        self.assertTrue(dc_idx < vlan_idx)
+
+        # reservations should come before allocations
+        res_idx = [i for i, line in enumerate(lines) if "reservations:" in line][0]
+        alloc_idx = [i for i, line in enumerate(lines) if "allocations:" in line][0]
+        self.assertTrue(res_idx < alloc_idx)
+
+        # Verify reservations are sorted (pool1: 10.0.0.0/28 before pool2: 10.0.0.64/28)
+        p1_idx = [i for i, line in enumerate(lines) if "id: pool1" in line][0]
+        p2_idx = [i for i, line in enumerate(lines) if "id: pool2" in line][0]
+        self.assertTrue(p1_idx < p2_idx)
+
+        # Verify allocations are sorted (host1: 10.0.0.5 before host2: 10.0.0.12)
+        h1_idx = [i for i, line in enumerate(lines) if "hostname: host1" in line][0]
+        h2_idx = [i for i, line in enumerate(lines) if "hostname: host2" in line][0]
+        self.assertTrue(h1_idx < h2_idx)
+
+        # Verify key comments are preserved
+        self.assertIn("# Document Leading Comment", formatted_content)
+        self.assertIn("# Relation Comment", formatted_content)
+        self.assertIn("# Description Comment", formatted_content)
+        self.assertIn("# Reservations Comment", formatted_content)
+        self.assertIn("# Allocations Comment", formatted_content)
+        self.assertIn("# Host 1 Comment", formatted_content)
+        self.assertIn("Host 2 Comment", formatted_content)
+
+        # 4. Run format for a second time -> should skip (Strict Idempotency!)
+        result2 = self.runner.invoke(cli, ["format", "--path", networks_dir])
+        self.assertEqual(result2.exit_code, 0)
+        self.assertIn("Formatted: 0 file(s)", result2.output)
+        self.assertIn("Skipped: 1 file(s)", result2.output)
+
+
 if __name__ == "__main__":
     unittest.main()

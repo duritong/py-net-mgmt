@@ -651,6 +651,158 @@ def edit(entity_type, name, path):
         exit(1)
 
 
+@cli.command("format")
+@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
+def format_cmd(path):
+    """Format and order all keys, reservations, and allocations in database files"""
+    import builtins
+    import io
+
+    from ruamel.yaml import YAML
+    from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+    if not os.path.exists(path):
+        click.echo(f"Error: Database path '{path}' does not exist.")
+        exit(1)
+
+    yaml_rt = YAML(typ="rt")
+    yaml_rt.preserve_quotes = True
+    yaml_rt.indent(mapping=2, sequence=4, offset=2)
+    yaml_rt.width = 120
+
+    # Helper to sort sequence of mapping items by IP
+    def get_sort_key_ip(item, field_name):
+        val = item.get(field_name)
+        if not val:
+            comment_val = item.get("comment", "")
+            return (ipaddress.ip_address("255.255.255.255"), comment_val)
+        val_str = str(val).split("-")[0].strip()
+        try:
+            return (ipaddress.ip_address(val_str), "")
+        except ValueError:
+            try:
+                return (ipaddress.ip_network(val_str, strict=False).network_address, "")
+            except ValueError:
+                return (ipaddress.ip_address("255.255.255.255"), val_str)
+
+    # Recursive function to format mapping structures
+    def format_node(node):
+        if isinstance(node, CommentedMap):
+            # Sort keys
+            cmap_keys = builtins.list(node.keys())
+            sorted_keys = []
+
+            # description first
+            if "description" in cmap_keys:
+                sorted_keys.append("description")
+
+            # relations in hierarchical order
+            relations = ["datacenter", "zone", "bridge_domain", "bridge-domain", "environment", "epg"]
+            for r in relations:
+                if r in cmap_keys and r not in sorted_keys:
+                    sorted_keys.append(r)
+
+            # reservations and allocations last
+            last_keys = []
+            for last_key in ["reservations", "allocations"]:
+                if last_key in cmap_keys:
+                    last_keys.append(last_key)
+
+            # other keys alphabetical
+            other = []
+            for k in cmap_keys:
+                if k not in sorted_keys and k not in last_keys:
+                    other.append(k)
+            other.sort()
+
+            all_sorted_keys = sorted_keys + other + last_keys
+
+            # Format nested structures inside
+            for k in all_sorted_keys:
+                node[k] = format_node(node[k])
+
+            # Rebuild CommentedMap with sorted keys and preserved comments
+            new_map = CommentedMap()
+            if hasattr(node, "ca") and node.ca:
+                new_map.ca.comment = node.ca.comment
+            for k in all_sorted_keys:
+                new_map[k] = node[k]
+                if hasattr(node, "ca") and k in node.ca.items:
+                    new_map.ca.items[k] = node.ca.items[k]
+            return new_map
+
+        elif isinstance(node, CommentedSeq) or isinstance(node, builtins.list):
+            # If this is reservations list or allocations list, we sort the elements!
+            if len(node) > 0 and isinstance(node[0], CommentedMap):
+                # Check reservations
+                if "cidr" in node[0] and "id" in node[0]:
+                    node = sorted(node, key=lambda x: get_sort_key_ip(x, "cidr"))
+                # Check allocations (allocations have either ip or cidr)
+                elif "ip" in node[0] or "cidr" in node[0]:
+                    if "ip" in node[0]:
+                        node = sorted(node, key=lambda x: get_sort_key_ip(x, "ip"))
+                    else:
+                        node = sorted(node, key=lambda x: get_sort_key_ip(x, "cidr"))
+
+            # Recursively format sequence elements
+            new_seq = CommentedSeq()
+            if hasattr(node, "ca") and node.ca:
+                new_seq.ca.comment = node.ca.comment
+            for i, item in enumerate(node):
+                formatted_item = format_node(item)
+                new_seq.append(formatted_item)
+                if hasattr(node, "ca") and i in node.ca.items:
+                    new_seq.ca.items[i] = node.ca.items[i]
+            return new_seq
+
+        return node
+
+    # Walk directory and load files
+    files_to_format = []
+    for root, _, files in os.walk(path):
+        for file in files:
+            if file.lower().endswith((".yaml", ".yml")):
+                files_to_format.append(os.path.join(root, file))
+
+    if not files_to_format:
+        click.echo("No YAML files found to format.")
+        return
+
+    formatted_count = 0
+    skipped_count = 0
+
+    for file_path in files_to_format:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content_before = f.read()
+
+            # Round-trip load
+            data = yaml_rt.load(content_before)
+            if data is None:
+                continue
+
+            # Format
+            formatted_data = format_node(data)
+
+            # Dump to buffer to check changes
+            buf = io.StringIO()
+            yaml_rt.dump(formatted_data, buf)
+            content_after = buf.getvalue()
+
+            if content_before == content_after:
+                skipped_count += 1
+                continue
+
+            # Save back to file
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content_after)
+            formatted_count += 1
+        except Exception as e:
+            click.echo(f"Error: Failed to format file '{file_path}': {e}")
+
+    click.echo(f"Format complete. Formatted: {formatted_count} file(s), Skipped: {skipped_count} file(s).")
+
+
 def main():
     cli()
 
