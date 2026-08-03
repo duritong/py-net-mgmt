@@ -1,6 +1,13 @@
 import unittest
 
-from src.net_mgmt.core import Allocation, Network, Reservation, StaticRoute, validate_network_list
+from src.net_mgmt.core import (
+    Allocation,
+    DatabaseValidationError,
+    Network,
+    Reservation,
+    StaticRoute,
+    validate_network_list,
+)
 
 
 class TestOrdering(unittest.TestCase):
@@ -250,6 +257,41 @@ class TestNetworkValidation(unittest.TestCase):
         net_disabled.add_reservation(id="pool", cidr="10.0.0.0/24", comment="Pool", allocatable=True)
         # Should skip .0, .1 (gateway), and return .2
         self.assertEqual(str(net_disabled.get_next_free_ip()), "10.0.0.2")
+
+    def test_batch_validation_reporting(self):
+        # 1. Test Network.validate() accumulating multiple errors
+        net = Network(name="multi_err", cidr="10.0.0.0/24")
+        # Issue 1: Reservation outside of network CIDR
+        net.reservations.append(
+            Reservation(id="out_of_bounds_res", cidr="192.168.1.0/24", comment="Outside", allocatable=True)
+        )
+        # Issue 2: Allocation with no allocatable reservation (already exists, but we bypass add_allocation)
+        net.allocations.append(Allocation(ip="10.0.0.99", hostname="unreserved"))
+
+        with self.assertRaises(DatabaseValidationError) as ctx:
+            net.validate()
+
+        self.assertEqual(len(ctx.exception.errors), 2)
+        # Check first error content
+        self.assertTrue(any("Reservation 192.168.1.0/24" in err for err in ctx.exception.errors))
+        # Check second error content
+        self.assertTrue(
+            any("Allocation 10.0.0.99 is not within any allocatable reservation" in err for err in ctx.exception.errors)
+        )
+
+        # 2. Test validate_network_list() accumulating multiple overlap errors
+        nets = [
+            Network(name="n1", cidr="10.0.0.0/16", routable=True),
+            Network(name="n2", cidr="10.0.1.0/24", routable=True),
+            Network(name="n3", cidr="10.0.2.0/24", routable=True),
+        ]
+        with self.assertRaises(DatabaseValidationError) as ctx_list:
+            validate_network_list(nets)
+
+        # There should be 4 overlap errors (2 from the global routable checks and 2 from context 'default' checks)
+        self.assertEqual(len(ctx_list.exception.errors), 4)
+        self.assertTrue(any("n1" in err and "n2" in err for err in ctx_list.exception.errors))
+        self.assertTrue(any("n1" in err and "n3" in err for err in ctx_list.exception.errors))
 
     def test_to_dict_properties(self):
         # 1. Allocation

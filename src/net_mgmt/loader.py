@@ -5,7 +5,7 @@ from typing import List
 
 import yaml
 
-from .core import Allocation, Network, Reservation
+from .core import Allocation, DatabaseValidationError, Network, Reservation
 
 
 def load_network_from_file(file_path: str) -> Network:
@@ -245,6 +245,7 @@ def apply_hierarchy_config(networks: List[Network], directory: str):
 
 
 def load_all_networks(directory: str) -> List[Network]:
+    errors = []
     if is_relational_mode(directory):
         # Relational Multi-Folder Database loading
         datacenters = load_yaml_files_from_subdir(directory, "datacenters")
@@ -258,22 +259,28 @@ def load_all_networks(directory: str) -> List[Network]:
         for file in os.listdir(net_dir):
             if file.lower().endswith(".yaml"):  # Enforce standard .yaml extension!
                 file_path = os.path.join(net_dir, file)
-                networks.append(load_network_from_file(file_path))
+                try:
+                    networks.append(load_network_from_file(file_path))
+                except DatabaseValidationError as e:
+                    errors.extend(e.errors)
+                except ValueError as e:
+                    errors.append(f"[{file}] {e}")
 
         # Validate and apply relationships/metadata resolution cascade
         for net in networks:
             # 1. ForeignKey Integrity and Strict validations for epg
             if net.epg:
                 if net.epg not in epgs:
-                    raise ValueError(
+                    errors.append(
                         f"ForeignKey Integrity: EPG '{net.epg}' referenced by network '{net.name}' does not exist."
                     )
+                    continue
                 epg_data = epgs[net.epg]
 
                 # VLAN Match check
                 epg_vlan = epg_data.get("vlan")
                 if net.vlan is not None and epg_vlan is not None and net.vlan != epg_vlan:
-                    raise ValueError(
+                    errors.append(
                         f"VLAN Match check: Network '{net.name}' defines vlan {net.vlan} "
                         f"which conflicts with EPG '{net.epg}' vlan {epg_vlan}."
                     )
@@ -283,7 +290,7 @@ def load_all_networks(directory: str) -> List[Network]:
                 # Bridge Domain Match check
                 epg_bd = epg_data.get("bridge_domain")
                 if net.bridge_domain is not None and epg_bd is not None and net.bridge_domain != epg_bd:
-                    raise ValueError(
+                    errors.append(
                         f"Bridge Domain Match check: Network '{net.name}' defines bridge_domain "
                         f"'{net.bridge_domain}' which conflicts with EPG '{net.epg}' "
                         f"bridge_domain '{epg_bd}'."
@@ -294,7 +301,7 @@ def load_all_networks(directory: str) -> List[Network]:
                 # Environment Match check
                 epg_env = epg_data.get("environment")
                 if net.environment is not None and epg_env is not None and net.environment != epg_env:
-                    raise ValueError(
+                    errors.append(
                         f"Environment Match check: Network '{net.name}' defines environment "
                         f"'{net.environment}' which conflicts with EPG '{net.epg}' "
                         f"environment '{epg_env}'."
@@ -304,7 +311,7 @@ def load_all_networks(directory: str) -> List[Network]:
 
             # 2. Network with bridge_domain must have an EPG (User's Decision #2!)
             if net.bridge_domain is not None and net.epg is None:
-                raise ValueError(
+                errors.append(
                     f"Validation Error: Network '{net.name}' defines a bridge_domain "
                     f"'{net.bridge_domain}' but does not have an epg defined."
                 )
@@ -312,16 +319,17 @@ def load_all_networks(directory: str) -> List[Network]:
             # 3. ForeignKey Integrity and Strict validations for bridge_domain
             if net.bridge_domain:
                 if net.bridge_domain not in bridge_domains:
-                    raise ValueError(
+                    errors.append(
                         f"ForeignKey Integrity: Bridge Domain '{net.bridge_domain}' "
                         f"referenced by network '{net.name}' does not exist."
                     )
+                    continue
                 bd_data = bridge_domains[net.bridge_domain]
 
                 # Datacenter Match check
                 bd_dc = bd_data.get("datacenter")
                 if net.datacenter is not None and bd_dc is not None and net.datacenter != bd_dc:
-                    raise ValueError(
+                    errors.append(
                         f"Datacenter Match check: Network '{net.name}' defines datacenter "
                         f"'{net.datacenter}' which conflicts with Bridge Domain '{net.bridge_domain}' "
                         f"datacenter '{bd_dc}'."
@@ -332,7 +340,7 @@ def load_all_networks(directory: str) -> List[Network]:
                 # Zone Match check
                 bd_zone = bd_data.get("zone")
                 if net.zone is not None and bd_zone is not None and net.zone != bd_zone:
-                    raise ValueError(
+                    errors.append(
                         f"Zone Match check: Network '{net.name}' defines zone '{net.zone}' "
                         f"which conflicts with Bridge Domain '{net.bridge_domain}' zone '{bd_zone}'."
                     )
@@ -342,7 +350,7 @@ def load_all_networks(directory: str) -> List[Network]:
             # 4. ForeignKey Integrity for environment
             if net.environment:
                 if net.environment not in environments:
-                    raise ValueError(
+                    errors.append(
                         f"ForeignKey Integrity: Environment '{net.environment}' "
                         f"referenced by network '{net.name}' does not exist."
                     )
@@ -350,7 +358,7 @@ def load_all_networks(directory: str) -> List[Network]:
             # 5. ForeignKey Integrity for datacenter
             if net.datacenter:
                 if net.datacenter not in datacenters:
-                    raise ValueError(
+                    errors.append(
                         f"ForeignKey Integrity: Datacenter '{net.datacenter}' "
                         f"referenced by network '{net.name}' does not exist."
                     )
@@ -358,7 +366,7 @@ def load_all_networks(directory: str) -> List[Network]:
             # 6. ForeignKey Integrity for zone
             if net.zone:
                 if net.zone not in zones:
-                    raise ValueError(
+                    errors.append(
                         f"ForeignKey Integrity: Zone '{net.zone}' referenced by network '{net.name}' does not exist."
                     )
 
@@ -398,6 +406,8 @@ def load_all_networks(directory: str) -> List[Network]:
                         setattr(net, field_name, val)
                         continue
 
+        if errors:
+            raise DatabaseValidationError(errors)
         return networks
     else:
         # Legacy flat structure with hierarchy.yaml
@@ -407,8 +417,15 @@ def load_all_networks(directory: str) -> List[Network]:
                 if file.endswith(".yaml") or file.endswith(".yml"):
                     if file in ("hierarchy.yaml", "hierarchy.yml"):
                         continue
-                    networks.append(load_network_from_file(os.path.join(root, file)))
+                    try:
+                        networks.append(load_network_from_file(os.path.join(root, file)))
+                    except DatabaseValidationError as e:
+                        errors.extend(e.errors)
+                    except ValueError as e:
+                        errors.append(f"[{file}] {e}")
         apply_hierarchy_config(networks, directory)
+        if errors:
+            raise DatabaseValidationError(errors)
         return networks
 
 

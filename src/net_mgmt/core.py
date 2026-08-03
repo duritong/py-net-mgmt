@@ -3,6 +3,15 @@ from dataclasses import dataclass, field
 from typing import Generator, List, Optional, Union
 
 
+class DatabaseValidationError(ValueError):
+    """An exception containing multiple validation errors across the database."""
+
+    def __init__(self, errors: list):
+        self.errors = errors
+        message = "\n".join(f" - {err}" for err in errors)
+        super().__init__(f"Database validation failed with {len(errors)} error(s):\n{message}")
+
+
 @dataclass
 class Allocation:
     ip: Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]] = None
@@ -428,13 +437,14 @@ class Network:
 
     def validate(self):
         """Validate network configuration and reservations."""
+        errors = []
         eff_reservations = self.effective_reservations
 
         for reservation in eff_reservations:
             # Check if all parts of the reservation are within network CIDR
             for res_net in reservation.networks:
                 if not res_net.subnet_of(self.cidr):
-                    raise ValueError(
+                    errors.append(
                         f"{self._error_prefix}"
                         f"Reservation {reservation.cidr} (part {res_net}) is not within network CIDR {self.cidr}"
                     )
@@ -449,7 +459,7 @@ class Network:
                     continue
 
                 if eff_reservations[i].overlaps(eff_reservations[j]):
-                    raise ValueError(
+                    errors.append(
                         f"{self._error_prefix}"
                         f"Reservation '{eff_reservations[i].id}' ({eff_reservations[i].cidr}) "
                         f"overlaps with '{eff_reservations[j].id}' ({eff_reservations[j].cidr})"
@@ -459,9 +469,7 @@ class Network:
         for alloc in self.allocations:
             for alloc_net in alloc.networks:
                 if not alloc_net.subnet_of(self.cidr):
-                    raise ValueError(
-                        f"{self._error_prefix}Allocation {alloc_net} is not within network CIDR {self.cidr}"
-                    )
+                    errors.append(f"{self._error_prefix}Allocation {alloc_net} is not within network CIDR {self.cidr}")
 
                 # Must be in an allocatable reservation
                 found_res = False
@@ -470,7 +478,7 @@ class Network:
                         found_res = True
                         break
                 if not found_res:
-                    raise ValueError(
+                    errors.append(
                         f"{self._error_prefix}"
                         f"Allocation {alloc.cidr or alloc.ip} is not within any allocatable reservation"
                     )
@@ -480,7 +488,7 @@ class Network:
                     if not res.allocatable:
                         for res_net in res.networks:
                             if alloc_net.overlaps(res_net):
-                                raise ValueError(
+                                errors.append(
                                     f"{self._error_prefix}"
                                     f"Allocation {alloc.cidr or alloc.ip} overlaps with non-allocatable "
                                     f"reservation '{res.id}' ({res.cidr})"
@@ -494,11 +502,16 @@ class Network:
                 for net1 in alloc.networks:
                     for net2 in other_alloc.networks:
                         if net1.overlaps(net2):
-                            raise ValueError(
+                            # To prevent duplicate logging of the same overlap in reverse,
+                            # we can check or simply log it. Let's keep it consistent.
+                            errors.append(
                                 f"{self._error_prefix}"
                                 f"Allocation {alloc.cidr or alloc.ip} overlaps with "
                                 f"{other_alloc.cidr or other_alloc.ip}"
                             )
+
+        if errors:
+            raise DatabaseValidationError(errors)
 
     def add_reservation(self, id: str, cidr: str, comment: str, allocatable: bool = False):
         reservation = Reservation(id=id, cidr=cidr, comment=comment, allocatable=allocatable)
@@ -838,6 +851,7 @@ class Network:
 
 def validate_network_list(networks: List[Network]):
     """Validate that routable networks and networks within the same context do not overlap."""
+    errors = []
 
     def check_overlaps(nets: List[Network], group_name: str):
         sorted_networks = sorted(nets, key=lambda x: x.cidr)
@@ -846,7 +860,7 @@ def validate_network_list(networks: List[Network]):
                 net1 = sorted_networks[i]
                 net2 = sorted_networks[j]
                 if net1.cidr.overlaps(net2.cidr):
-                    raise ValueError(
+                    errors.append(
                         f"Network '{net1.name}' ({net1.cidr}, "
                         f"EPG: '{net1.epg or 'None'}', BD: '{net1.bridge_domain or 'None'}') "
                         f"overlaps with '{net2.name}' ({net2.cidr}, "
@@ -865,6 +879,9 @@ def validate_network_list(networks: List[Network]):
 
     for ctx, nets in context_groups.items():
         check_overlaps(nets, f"context '{ctx}'")
+
+    if errors:
+        raise DatabaseValidationError(errors)
 
 
 def query_vlans(
