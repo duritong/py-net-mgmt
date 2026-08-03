@@ -186,6 +186,7 @@ class Network:
     allocations: List[Allocation] = field(default_factory=list)
     reserve_gateway: bool = True
     reserve_internal: bool = True
+    reserve_internal_until: int = 6
 
     def __post_init__(self):
         if isinstance(self.cidr, str):
@@ -255,7 +256,7 @@ class Network:
 
             if self.reserve_internal:
                 start_int = first_ip + 2
-                end_int = first_ip + 5
+                end_int = first_ip + self.reserve_internal_until
                 if start_int in self.cidr and end_int in self.cidr:
                     sys_res.append(
                         Reservation(
@@ -736,6 +737,7 @@ class Network:
             "context": self.context,
             "reserve_gateway": self.reserve_gateway,
             "reserve_internal": self.reserve_internal,
+            "reserve_internal_until": self.reserve_internal_until,
         }
         if self.description:
             res["description"] = self.description

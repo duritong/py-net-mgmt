@@ -253,6 +253,14 @@ print(net_dict["static_routes"])    # [{"cidr": "172.16.0.0/16", "gateway": "10.
 {{ network.to_dict | tojson }}
 ```
 
+### Configuring System Reservations
+
+Networks support standard optional configuration keys in their YAML database files to control which system-level IP addresses are automatically excluded from allocatable IP pools:
+
+- `reserve_gateway` (`bool`, defaults to `true`): If `true`, reserves the first usable host IP (e.g. `.1`) as `sys-gateway`.
+- `reserve_internal` (`bool`, defaults to `true`): If `true`, reserves the internal system host IPs starting from `.2` as `sys-internal`.
+- `reserve_internal_until` (`int`, defaults to `6`): Configures the dynamic upper boundary (offset from the network base address) for the internal reserved range. For example, setting this to `5` will reserve `.2` up to `.5`, while setting this to `10` will reserve `.2` up to `.10`.
+
 ---
 
 ## 3. Jinja2 Filters Integration

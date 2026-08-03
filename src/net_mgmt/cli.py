@@ -230,6 +230,7 @@ def show(name, format, path):
     console.print(f"[bold cyan]Routable:[/bold cyan] {network.routable}")
     console.print(f"[bold cyan]Reserve Gateway:[/bold cyan] {network.reserve_gateway}")
     console.print(f"[bold cyan]Reserve Internal:[/bold cyan] {network.reserve_internal}")
+    console.print(f"[bold cyan]Reserve Internal Until:[/bold cyan] {network.reserve_internal_until}")
 
     if network.effective_reservations:
         console.print("\n[bold yellow]Reservations:[/bold yellow]")

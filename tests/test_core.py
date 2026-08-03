@@ -14,7 +14,7 @@ class TestOrdering(unittest.TestCase):
         # Sort them as CLI would
         sorted_res = sorted(eff_res, key=lambda r: r.networks[0].network_address)
 
-        # Expectation: sys-network (.0), sys-gateway (.1), sys-internal (.2-5), p1 (.10), p2 (.20), sys-broadcast (.255)
+        # Expectation: sys-network (.0), sys-gateway (.1), sys-internal (.2-6), p1 (.10), p2 (.20), sys-broadcast (.255)
         ids = [r.id for r in sorted_res]
         self.assertEqual(ids, ["sys-network", "sys-gateway", "sys-internal", "p1", "p2", "sys-broadcast"])
 
@@ -23,7 +23,7 @@ class TestNetwork(unittest.TestCase):
     def setUp(self):
         # Basic network 10.0.0.0/24
         # Gateway: 10.0.0.1 (System)
-        # Internal: 10.0.0.2-5 (System)
+        # Internal: 10.0.0.2-6 (System)
         self.net = Network(name="test", cidr="10.0.0.0/24")
 
     def test_static_routes(self):
@@ -95,9 +95,9 @@ class TestNetwork(unittest.TestCase):
         # It acts as an exclude-rule, so system IPs are skipped automatically.
         self.net.add_reservation(id="large_pool", cidr="10.0.0.0/24", comment="Large Pool", allocatable=True)
 
-        # Free IP should skip .0, .1, and .2-.5, returning .6!
+        # Free IP should skip .0, .1, and .2-.6, returning .7!
         ip = self.net.get_next_free_ip()
-        self.assertEqual(str(ip), "10.0.0.6")
+        self.assertEqual(str(ip), "10.0.0.7")
 
     def test_subnet_broadcast_no_conflict(self):
         # In a 10.0.0.0/22 network, 10.0.3.0/24 includes the broadcast 10.0.3.255.
@@ -231,6 +231,25 @@ class TestNetworkValidation(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             validate_network_list(nets)
+
+    def test_configurable_internal_reservations(self):
+        # Test case 1: Custom reserve_internal_until=5 (matches old default behavior)
+        net_until_5 = Network(name="until_5", cidr="10.0.0.0/24", reserve_internal_until=5)
+        net_until_5.add_reservation(id="pool", cidr="10.0.0.0/24", comment="Pool", allocatable=True)
+        # Should skip .0, .1 (gateway), and .2-.5, returning .6
+        self.assertEqual(str(net_until_5.get_next_free_ip()), "10.0.0.6")
+
+        # Test case 2: Custom reserve_internal_until=8
+        net_until_8 = Network(name="until_8", cidr="10.0.0.0/24", reserve_internal_until=8)
+        net_until_8.add_reservation(id="pool", cidr="10.0.0.0/24", comment="Pool", allocatable=True)
+        # Should skip .0, .1 (gateway), and .2-.8, returning .9
+        self.assertEqual(str(net_until_8.get_next_free_ip()), "10.0.0.9")
+
+        # Test case 3: Disable reserve_internal completely, even if reserve_internal_until is set
+        net_disabled = Network(name="disabled", cidr="10.0.0.0/24", reserve_internal=False, reserve_internal_until=10)
+        net_disabled.add_reservation(id="pool", cidr="10.0.0.0/24", comment="Pool", allocatable=True)
+        # Should skip .0, .1 (gateway), and return .2
+        self.assertEqual(str(net_disabled.get_next_free_ip()), "10.0.0.2")
 
     def test_to_dict_properties(self):
         # 1. Allocation

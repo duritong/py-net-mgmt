@@ -153,6 +153,9 @@ The database enforces a series of strict structural and logical constraints:
 2. **Context Overlaps**: Non-routable networks are grouped by their `context` metadata (default is `default`). No two networks in the same context are allowed to overlap. Overlaps are permitted *only* across different isolated contexts.
 3. **Allocation Overlaps**: Within a network, no allocation can overlap with another allocation.
 4. **Reservation Alignment**: All allocations must reside completely within an **allocatable** reservation (such as user-defined IP pools). They cannot reside in system reservations (network address, broadcast, gateway) or non-allocatable pools.
+   - **System Reservations**: These automatically exclude the network address (`sys-network`), IPv4 broadcast address (`sys-broadcast`), the default gateway (`sys-gateway`, first host IP `.1`), and an internal system block (`sys-internal`, `.2` up to `.6` by default).
+   - **Gateway Config**: The gateway reservation can be disabled per-network with `reserve_gateway: false`.
+   - **Internal Config**: The internal system block can be disabled with `reserve_internal: false`. Its upper boundary can be customized per-network using `reserve_internal_until` (e.g., `reserve_internal_until: 5` to reserve up to `.5` or `reserve_internal_until: 10` to reserve up to `.10`). It defaults to `6` if unspecified.
 5. **Strict Relational Integrity (Relational Mode)**:
    - **ForeignKey Integrity**: If any reference (like `epg: EPG_App`) points to a non-existent entity file, loading fails.
    - **VLAN/BridgeDomain/Environment Match**: If a network explicitly defines any of these attributes, they must not conflict with the linked EPG's properties.

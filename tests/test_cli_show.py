@@ -45,13 +45,14 @@ allocations:
         self.assertIn("Reserve Gateway: True", result.output)
         self.assertIn("Context: default", result.output)
         self.assertIn("Reserve Internal: True", result.output)
+        self.assertIn("Reserve Internal Until: 6", result.output)
         self.assertIn("Allocations", result.output)
         self.assertIn("192.168.100.16/28", result.output)
         self.assertIn("Subnet 1", result.output)
         self.assertIn("Usage", result.output)
         self.assertIn("9.4%", result.output)
         self.assertIn("Unreserved Ranges:", result.output)
-        self.assertIn("192.168.100.6 - 192.168.100.9", result.output)
+        self.assertIn("192.168.100.7 - 192.168.100.9", result.output)
 
     def test_show_formats(self):
         # 1. Test JSON format

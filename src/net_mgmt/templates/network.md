@@ -28,6 +28,7 @@
 - **Routable**: `{{ network.routable }}`
 - **Reserve Gateway**: `{{ network.reserve_gateway }}`
 - **Reserve Internal**: `{{ network.reserve_internal }}`
+- **Reserve Internal Until**: `{{ network.reserve_internal_until }}`
 
 ## Reservations
 {% if network.effective_reservations -%}

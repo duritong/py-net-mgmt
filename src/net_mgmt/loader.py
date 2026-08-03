@@ -68,6 +68,7 @@ def load_network_from_file(file_path: str) -> Network:
         allocations=allocations,
         reserve_gateway=data.get("reserve_gateway", True),
         reserve_internal=data.get("reserve_internal", True),
+        reserve_internal_until=data.get("reserve_internal_until", 6),
     )
     network.validate()
     return network
@@ -468,6 +469,7 @@ def save_network_to_file(network: Network):
                 "routable": network.routable,
                 "reserve_gateway": network.reserve_gateway,
                 "reserve_internal": network.reserve_internal,
+                "reserve_internal_until": network.reserve_internal_until,
             }
 
             if network.context != "default":

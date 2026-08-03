@@ -206,6 +206,7 @@ class TestCliFormat(unittest.TestCase):
         yaml_content = """# Document Leading Comment
 vlan: 10
 cidr: 10.0.0.0/24
+reserve_internal_until: 5
 # Relation Comment
 datacenter: DC1
 # Description Comment
