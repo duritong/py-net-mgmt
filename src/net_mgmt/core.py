@@ -435,6 +435,17 @@ class Network:
 
         return results
 
+    def _get_alloc_ident(self, alloc: Allocation) -> str:
+        parts = []
+        if alloc.hostname:
+            parts.append(f"hostname: '{alloc.hostname}'")
+        if alloc.comment:
+            parts.append(f"comment: '{alloc.comment}'")
+
+        if parts:
+            return f"{alloc.cidr or alloc.ip} ({', '.join(parts)})"
+        return str(alloc.cidr or alloc.ip)
+
     def validate(self):
         """Validate network configuration and reservations."""
         errors = []
@@ -480,7 +491,7 @@ class Network:
                 if not found_res:
                     errors.append(
                         f"{self._error_prefix}"
-                        f"Allocation {alloc.cidr or alloc.ip} is not within any allocatable reservation"
+                        f"Allocation {self._get_alloc_ident(alloc)} is not within any allocatable reservation"
                     )
 
                 # Must not overlap with any non-allocatable reservation
@@ -490,24 +501,21 @@ class Network:
                             if alloc_net.overlaps(res_net):
                                 errors.append(
                                     f"{self._error_prefix}"
-                                    f"Allocation {alloc.cidr or alloc.ip} overlaps with non-allocatable "
+                                    f"Allocation {self._get_alloc_ident(alloc)} overlaps with non-allocatable "
                                     f"reservation '{res.id}' ({res.cidr})"
                                 )
 
-            # Check for Duplicate Allocations (overlap check)
-            # Compare this alloc against all other allocs
-            for other_alloc in self.allocations:
-                if alloc is other_alloc:
-                    continue
+        # Check for Duplicate Allocations (overlap check)
+        for i, alloc in enumerate(self.allocations):
+            for j in range(i + 1, len(self.allocations)):
+                other_alloc = self.allocations[j]
                 for net1 in alloc.networks:
                     for net2 in other_alloc.networks:
                         if net1.overlaps(net2):
-                            # To prevent duplicate logging of the same overlap in reverse,
-                            # we can check or simply log it. Let's keep it consistent.
                             errors.append(
                                 f"{self._error_prefix}"
-                                f"Allocation {alloc.cidr or alloc.ip} overlaps with "
-                                f"{other_alloc.cidr or other_alloc.ip}"
+                                f"Allocation {self._get_alloc_ident(alloc)} overlaps with "
+                                f"{self._get_alloc_ident(other_alloc)}"
                             )
 
         if errors:

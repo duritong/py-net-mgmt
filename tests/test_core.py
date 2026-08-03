@@ -276,7 +276,10 @@ class TestNetworkValidation(unittest.TestCase):
         self.assertTrue(any("Reservation 192.168.1.0/24" in err for err in ctx.exception.errors))
         # Check second error content
         self.assertTrue(
-            any("Allocation 10.0.0.99 is not within any allocatable reservation" in err for err in ctx.exception.errors)
+            any(
+                "Allocation 10.0.0.99 (hostname: 'unreserved') is not within any allocatable reservation" in err
+                for err in ctx.exception.errors
+            )
         )
 
         # 2. Test validate_network_list() accumulating multiple overlap errors
@@ -292,6 +295,23 @@ class TestNetworkValidation(unittest.TestCase):
         self.assertEqual(len(ctx_list.exception.errors), 4)
         self.assertTrue(any("n1" in err and "n2" in err for err in ctx_list.exception.errors))
         self.assertTrue(any("n1" in err and "n3" in err for err in ctx_list.exception.errors))
+
+        # 3. Test de-duplicated allocation overlaps with descriptive identifiers
+        net_overlaps = Network(name="overlaps_test", cidr="10.0.0.0/24")
+        net_overlaps.reservations.append(Reservation(id="pool", cidr="10.0.0.0/24", comment="Pool", allocatable=True))
+        net_overlaps.allocations.append(Allocation(ip="10.0.0.10", hostname="host-a", comment="A"))
+        net_overlaps.allocations.append(Allocation(ip="10.0.0.10", hostname="host-b", comment="B"))
+
+        with self.assertRaises(DatabaseValidationError) as ctx_overlaps:
+            net_overlaps.validate()
+
+        self.assertEqual(len(ctx_overlaps.exception.errors), 1)
+        err_msg = ctx_overlaps.exception.errors[0]
+        expected_overlap = (
+            "Allocation 10.0.0.10 (hostname: 'host-a', comment: 'A') overlaps with "
+            "10.0.0.10 (hostname: 'host-b', comment: 'B')"
+        )
+        self.assertIn(expected_overlap, err_msg)
 
     def test_to_dict_properties(self):
         # 1. Allocation
