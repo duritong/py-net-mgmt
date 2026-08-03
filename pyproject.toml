@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A Python library and CLI for organizing network definitions."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -36,7 +36,7 @@ net_mgmt = ["templates/*.md"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
