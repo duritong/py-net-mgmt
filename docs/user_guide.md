@@ -224,11 +224,7 @@ save_network_to_file(net)
 from net_mgmt.core import query_vlans
 
 # Fetch production VLANs in Frankfurt
-vlan_ids = query_vlans(
-    networks,
-    environment="production",
-    datacenter="DC_Frankfurt"
-)
+vlan_ids = query_vlans(networks, environment="production", datacenter="DC_Frankfurt")
 print(f"Matched VLANs: {vlan_ids}")
 ```
 
@@ -239,9 +235,9 @@ Every core model (`Allocation`, `Reservation`, `StaticRoute`, and `Network`) fea
 # Convert a Network and all of its recursively nested lists to a Python dictionary
 net_dict = net.to_dict
 
-print(net_dict["name"])             # "backend_net"
-print(net_dict["cidr"])             # "10.0.1.0/24"
-print(net_dict["static_routes"])    # [{"cidr": "172.16.0.0/16", "gateway": "10.0.1.1"}]
+print(net_dict["name"])  # "backend_net"
+print(net_dict["cidr"])  # "10.0.1.0/24"
+print(net_dict["static_routes"])  # [{"cidr": "172.16.0.0/16", "gateway": "10.0.1.1"}]
 ```
 
 #### Zero-Boilerplate Jinja2 Usage:

@@ -91,10 +91,12 @@ If you create a new test file, name it with the `test_` prefix (e.g., `tests/tes
 import unittest
 from net_mgmt.core import Network
 
+
 class TestNewFeature(unittest.TestCase):
     def test_feature_logic(self):
         # Your test logic here
         pass
+
 
 if __name__ == "__main__":
     unittest.main()
