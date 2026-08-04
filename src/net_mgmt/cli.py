@@ -1,3 +1,4 @@
+import builtins
 import ipaddress
 import os
 
@@ -7,8 +8,10 @@ from rich.table import Table
 
 from .db import get_database, set_db_path
 
+CONTEXT_SETTINGS = dict(max_content_width=120, terminal_width=120)
 
-@click.group()
+
+@click.group(context_settings=CONTEXT_SETTINGS)
 def cli():
     """Network Management CLI"""
     pass
@@ -32,6 +35,7 @@ def validate(path, format):
 
 
 @cli.command()
+@click.argument("level", type=str)
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
 @click.option("--description", "-d", default=None, help="Filter networks by description (case-insensitive substring)")
 @click.option("--cidr", default=None, help="Filter networks by CIDR (string or exact subnet)")
@@ -52,15 +56,137 @@ def validate(path, format):
     help="Output format (table, csv, json)",
 )
 def list(
-    path, description, cidr, ip, vlan, environment, datacenter, zone, epg, bridge_domain, context, no_wrap, format
+    level,
+    path,
+    description,
+    cidr,
+    ip,
+    vlan,
+    environment,
+    datacenter,
+    zone,
+    epg,
+    bridge_domain,
+    context,
+    no_wrap,
+    format,
 ):
-    """List available networks with coordinate filtering"""
+    """List available networks or hierarchical level entities with coordinate filtering"""
+    alias_map = {
+        "networks": "networks",
+        "network": "networks",
+        "nets": "networks",
+        "net": "networks",
+        "bridge-domains": "bridge_domains",
+        "bridge-domain": "bridge_domains",
+        "bridgedomains": "bridge_domains",
+        "bridgedomain": "bridge_domains",
+        "bridge_domains": "bridge_domains",
+        "bridge_domain": "bridge_domains",
+        "bds": "bridge_domains",
+        "bd": "bridge_domains",
+        "datacenters": "datacenters",
+        "datacenter": "datacenters",
+        "dcs": "datacenters",
+        "dc": "datacenters",
+        "zones": "zones",
+        "zone": "zones",
+        "environments": "environments",
+        "environment": "environments",
+        "envs": "environments",
+        "env": "environments",
+        "epgs": "epgs",
+        "epg": "epgs",
+    }
+
+    normalized_level = alias_map.get(level.lower())
+    if not normalized_level:
+        click.echo(f"Error: Unknown hierarchical level '{level}'.")
+        exit(1)
+
     set_db_path(path)
     try:
         networks = get_database()
     except ValueError as e:
         click.echo(f"Validation Error: {e}")
         exit(1)
+
+    if normalized_level != "networks":
+        from .db import get_cached_entities
+
+        entities = get_cached_entities(normalized_level)
+
+        if not entities:
+            click.echo(f"No {normalized_level.replace('_', ' ')} found.")
+            return
+
+        import sys
+
+        no_wrap_effective = no_wrap or not sys.stdout.isatty()
+
+        if format == "json":
+            import json
+
+            click.echo(json.dumps([{"name": k, **v} for k, v in sorted(entities.items())], indent=2))
+            return
+
+        # Determine headers & keys to display per level
+        if normalized_level == "datacenters":
+            headers = ["Name", "Timeservers", "DNS Nameservers"]
+            keys = ["timeservers", "dns_nameservers"]
+        elif normalized_level == "zones":
+            headers = ["Name", "DNS Search"]
+            keys = ["dns_search"]
+        elif normalized_level == "environments":
+            headers = ["Name", "Timeservers"]
+            keys = ["timeservers"]
+        elif normalized_level == "bridge_domains":
+            headers = ["Name", "Datacenter", "Zone", "Default MTU"]
+            keys = ["datacenter", "zone", "default_mtu"]
+        elif normalized_level == "epgs":
+            headers = ["Name", "Bridge Domain", "Environment", "VLAN", "Default MTU"]
+            keys = ["bridge_domain", "environment", "vlan", "default_mtu"]
+
+        if format == "csv":
+            import csv
+
+            writer = csv.writer(sys.stdout)
+            writer.writerow(headers)
+            for name, data in sorted(entities.items()):
+                row = [name]
+                for key in keys:
+                    val = data.get(key, "")
+                    if isinstance(val, builtins.list):
+                        row.append(", ".join(map(str, val)))
+                    else:
+                        row.append(str(val) if val is not None else "")
+                writer.writerow(row)
+            return
+
+        # Table format
+        if no_wrap_effective:
+            width = 9999
+        else:
+            width = None
+
+        console = Console(width=width)
+        table = Table()
+        for h in headers:
+            style = "cyan" if h == "Name" else "green" if "MTU" in h or "VLAN" in h else "magenta"
+            table.add_column(h, style=style, no_wrap=no_wrap_effective)
+
+        for name, data in sorted(entities.items()):
+            row_vals = [name]
+            for key in keys:
+                val = data.get(key, "")
+                if isinstance(val, builtins.list):
+                    row_vals.append(", ".join(map(str, val)))
+                else:
+                    row_vals.append(str(val) if val is not None else "")
+            table.add_row(*row_vals)
+
+        console.print(table)
+        return
 
     if not networks:
         click.echo("No networks found.")
@@ -116,23 +242,23 @@ def list(
 
     import sys
 
-    if no_wrap:
+    no_wrap_effective = no_wrap or not sys.stdout.isatty()
+
+    if no_wrap_effective:
         width = 9999
-    elif not sys.stdout.isatty():
-        width = 120
     else:
         width = None
 
     console = Console(width=width)
     table = Table()
-    table.add_column("Name", style="cyan", no_wrap=no_wrap)
-    table.add_column("CIDR", style="green", no_wrap=no_wrap)
-    table.add_column("Context", style="magenta", no_wrap=no_wrap)
-    table.add_column("Datacenter", style="yellow", no_wrap=no_wrap)
-    table.add_column("Zone", style="blue", no_wrap=no_wrap)
-    table.add_column("Environment", style="white", no_wrap=no_wrap)
-    table.add_column("MTU", justify="right", no_wrap=no_wrap)
-    table.add_column("Description", no_wrap=no_wrap)
+    table.add_column("Name", style="cyan", no_wrap=no_wrap_effective)
+    table.add_column("CIDR", style="green", no_wrap=no_wrap_effective)
+    table.add_column("Context", style="magenta", no_wrap=no_wrap_effective)
+    table.add_column("Datacenter", style="yellow", no_wrap=no_wrap_effective)
+    table.add_column("Zone", style="blue", no_wrap=no_wrap_effective)
+    table.add_column("Environment", style="white", no_wrap=no_wrap_effective)
+    table.add_column("MTU", justify="right", no_wrap=no_wrap_effective)
+    table.add_column("Description", no_wrap=no_wrap_effective)
 
     for net in networks:
         desc = net.description or ""
@@ -197,7 +323,7 @@ def show(name, format, path):
 
     import rich.box
 
-    width = 120 if not sys.stdout.isatty() else None
+    width = 9999 if not sys.stdout.isatty() else None
     console = Console(width=width)
 
     console.print(f"[bold cyan]Name:[/bold cyan] {network.name}")
@@ -605,42 +731,18 @@ def edit(entity_type, name, path):
         click.echo(f"Error: Unknown entity type '{entity_type}'.")
         exit(1)
 
-    from .loader import is_relational_mode
-
-    relational = is_relational_mode(path)
     file_path = None
 
-    if relational:
-        # Check standard relational subdirectory folder
-        possible_extensions = [".yaml", ".yml"]
-        for ext in possible_extensions:
-            p = os.path.join(path, normalized_type, f"{name}{ext}")
-            if os.path.exists(p):
-                file_path = p
-                break
-        if not file_path:
-            # Fallback to suggestion
-            file_path = os.path.join(path, normalized_type, f"{name}.yaml")
-    else:
-        # Legacy Mode - only networks exist as individual files
-        if normalized_type != "networks":
-            click.echo(
-                f"Error: Entity type '{entity_type}' is only available in Relational Multi-Folder Database Mode."
-            )
-            exit(1)
-
-        # Search recursively for network file
-        for root, _, files in os.walk(path):
-            for file in files:
-                basename, ext = os.path.splitext(file.lower())
-                if basename == name.lower() and ext in [".yaml", ".yml"]:
-                    file_path = os.path.join(root, file)
-                    break
-            if file_path:
-                break
-
-        if not file_path:
-            file_path = os.path.join(path, f"{name}.yaml")
+    # Check standard relational subdirectory folder
+    possible_extensions = [".yaml", ".yml"]
+    for ext in possible_extensions:
+        p = os.path.join(path, normalized_type, f"{name}{ext}")
+        if os.path.exists(p):
+            file_path = p
+            break
+    if not file_path:
+        # Fallback to suggestion
+        file_path = os.path.join(path, normalized_type, f"{name}.yaml")
 
     # Scaffold the directory if missing
     os.makedirs(os.path.dirname(file_path), exist_ok=True)

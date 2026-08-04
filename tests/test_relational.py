@@ -28,12 +28,8 @@ class TestRelationalDatabase(unittest.TestCase):
         # Empty dir
         self.assertFalse(is_relational_mode(self.temp_dir))
 
-        # Only networks
+        # Networks folder exists -> True (relational mode layout)
         os.makedirs(os.path.join(self.temp_dir, "networks"), exist_ok=True)
-        self.assertFalse(is_relational_mode(self.temp_dir))
-
-        # Networks + epgs
-        os.makedirs(os.path.join(self.temp_dir, "epgs"), exist_ok=True)
         self.assertTrue(is_relational_mode(self.temp_dir))
 
     def test_successful_relational_load(self):

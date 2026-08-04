@@ -39,19 +39,36 @@ Restart your terminal or run `source ~/.bashrc` to instantly activate auto-compl
 ---
 
 ### Command: `list`
-Lists all networks in the database, displaying their core attributes (Name, CIDR, Context, Datacenter, Zone, Environment, MTU, and Description) in a clean terminal table. Features coordinate filters, column wrap configuration, and multiple output format filters.
-* `--no-wrap`: Disables column text wrapping and truncation, forcing each network row to output as a single, fully expanded line (perfect for piping/scripting or displaying long names).
+Lists all networks or entities at a given hierarchical level (`networks`, `bridge-domains`, `datacenters`, `zones`, `environments`, or `epgs`), displaying their core attributes in a clean terminal table. Features coordinate filters, column wrap configuration, and multiple output format filters.
+
+#### Arguments & Aliases
+* `LEVEL` *(Required)*: The hierarchical level to list. Acceptable levels and their abbreviations/aliases are:
+  - **`networks`** (aliases: `network`, `nets`, `net`)
+  - **`bridge-domains`** (aliases: `bridge-domain`, `bridgedomains`, `bridgedomain`, `bds`, `bd`)
+  - **`datacenters`** (aliases: `datacenter`, `dcs`, `dc`)
+  - **`zones`** (alias: `zone`)
+  - **`environments`** (aliases: `environment`, `envs`, `env`)
+  - **`epgs`** (alias: `epg`)
+
+#### Options
+* `--no-wrap`: Disables column text wrapping and truncation, forcing each entity row to output as a single, fully expanded line (perfect for piping/scripting or displaying long names). Note: This no-wrap behavior is automatically enabled when output is piped or redirected (not a TTY) to make command-line manipulation (such as grep) seamless.
 * `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
 
 ```bash
 # List all networks in tabular format
-net-mgmt list
+net-mgmt list networks
+
+# List all bridge domains in tabular format
+net-mgmt list bridge-domains
+
+# List datacenters using abbreviation 'dc'
+net-mgmt list dc
 
 # List networks formatted as standard structured JSON
-net-mgmt list --format json
+net-mgmt list networks --format json
 
 # List networks formatted as CSV
-net-mgmt list -f csv
+net-mgmt list networks -f csv
 ```
 
 ---

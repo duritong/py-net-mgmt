@@ -126,64 +126,6 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(len(res7), 1)
         self.assertEqual(res7[0].name, "n1")
 
-    def test_hierarchy_inheritance(self):
-        import os
-        import shutil
-        import tempfile
-
-        from net_mgmt.loader import load_all_networks
-
-        test_dir = tempfile.mkdtemp()
-        try:
-            # Write hierarchy.yaml
-            hierarchy_content = """
-datacenters:
-  DC_Frankfurt:
-    timeservers:
-      - 10.10.10.1
-      - 10.10.10.2
-    zones:
-      Trusted:
-        dns_search:
-          - trusted.internal
-        bridge_domains:
-          BD_Prod:
-            environments:
-              production:
-                epgs:
-                  EPG_App:
-                    default_mtu: 1500
-                    networks:
-                      - backend_net
-"""
-            with open(os.path.join(test_dir, "hierarchy.yaml"), "w") as f:
-                f.write(hierarchy_content)
-
-            # Write individual network file with only CIDR
-            net_content = """
-cidr: 10.0.2.0/24
-vlan: 30
-"""
-            with open(os.path.join(test_dir, "backend_net.yaml"), "w") as f:
-                f.write(net_content)
-
-            networks = load_all_networks(test_dir)
-            self.assertEqual(len(networks), 1)
-
-            net = networks[0]
-            self.assertEqual(net.name, "backend_net")
-            # Verify inherited fields
-            self.assertEqual(net.datacenter, "DC_Frankfurt")
-            self.assertEqual(net.zone, "Trusted")
-            self.assertEqual(net.bridge_domain, "BD_Prod")
-            self.assertEqual(net.environment, "production")
-            self.assertEqual(net.epg, "EPG_App")
-            self.assertEqual(net.timeservers, ["10.10.10.1", "10.10.10.2"])
-            self.assertEqual(net.dns_search, ["trusted.internal"])
-            self.assertEqual(net.default_mtu, 1500)
-        finally:
-            shutil.rmtree(test_dir)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,13 +10,13 @@ class TestDB(unittest.TestCase):
         # Create two different network directories
         self.dir1 = "networks_db_test_1"
         self.dir2 = "networks_db_test_2"
-        os.makedirs(self.dir1, exist_ok=True)
-        os.makedirs(self.dir2, exist_ok=True)
+        os.makedirs(os.path.join(self.dir1, "networks"), exist_ok=True)
+        os.makedirs(os.path.join(self.dir2, "networks"), exist_ok=True)
 
-        with open(os.path.join(self.dir1, "net1.yaml"), "w") as f:
+        with open(os.path.join(self.dir1, "networks", "net1.yaml"), "w") as f:
             f.write("cidr: 10.1.0.0/24\nname: net1")
 
-        with open(os.path.join(self.dir2, "net2.yaml"), "w") as f:
+        with open(os.path.join(self.dir2, "networks", "net2.yaml"), "w") as f:
             f.write("cidr: 10.2.0.0/24\nname: net2")
 
     def tearDown(self):

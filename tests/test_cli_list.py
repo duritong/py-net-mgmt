@@ -16,6 +16,14 @@ class TestCliList(unittest.TestCase):
         self.networks_dir = os.path.join(self.test_dir, "networks")
         os.makedirs(self.networks_dir)
 
+        # Relational directories and files to satisfy ForeignKey validation
+        os.makedirs(os.path.join(self.test_dir, "datacenters"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "zones"), exist_ok=True)
+        with open(os.path.join(self.test_dir, "datacenters", "DC1.yaml"), "w") as f:
+            f.write("{}")
+        with open(os.path.join(self.test_dir, "zones", "dmz.yaml"), "w") as f:
+            f.write("{}")
+
         self.network_file = os.path.join(self.networks_dir, "test_net.yaml")
         with open(self.network_file, "w") as f:
             f.write("""
@@ -32,7 +40,7 @@ default_mtu: 1500
         shutil.rmtree(self.test_dir)
 
     def test_list_output(self):
-        result = self.runner.invoke(cli, ["list", "--path", self.networks_dir])
+        result = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir])
         if result.exit_code != 0:
             print(result.output)
         self.assertEqual(result.exit_code, 0)
@@ -58,72 +66,90 @@ default_mtu: 1500
 
     def test_list_with_description_filter(self):
         # 1. Matching filter (case-insensitive substring) -> should list the network
-        result = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--description", "network"])
+        result = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--description", "network"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("test_net", result.output)
         self.assertIn("Test Network Description", result.output)
 
         # 2. Non-matching filter -> should output No matching networks found
-        result2 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--description", "nonexistent"])
+        result2 = self.runner.invoke(
+            cli, ["list", "networks", "--path", self.networks_dir, "--description", "nonexistent"]
+        )
         self.assertEqual(result2.exit_code, 0)
         self.assertIn("No matching networks found.", result2.output)
 
     def test_list_with_coordinate_filters(self):
         # 1. Matching VLAN ID -> should list
-        result1 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--vlan", "10"])
+        result1 = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--vlan", "10"])
         self.assertEqual(result1.exit_code, 0)
         self.assertIn("test_net", result1.output)
 
         # 2. Non-matching VLAN ID -> should output No matching networks found
-        result2 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--vlan", "999"])
+        result2 = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--vlan", "999"])
         self.assertEqual(result2.exit_code, 0)
         self.assertIn("No matching networks found.", result2.output)
 
         # 3. Matching Datacenter -> should list
-        result3 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--dc", "DC1"])
+        result3 = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--dc", "DC1"])
         self.assertEqual(result3.exit_code, 0)
         self.assertIn("test_net", result3.output)
 
         # 4. Non-matching Datacenter -> should output No matching networks found
-        result4 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--dc", "DC2"])
+        result4 = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--dc", "DC2"])
         self.assertEqual(result4.exit_code, 0)
         self.assertIn("No matching networks found.", result4.output)
 
         # 5. Matching CIDR -> should list
-        result5 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--cidr", "192.168.100.0/24"])
+        result5 = self.runner.invoke(
+            cli, ["list", "networks", "--path", self.networks_dir, "--cidr", "192.168.100.0/24"]
+        )
         self.assertEqual(result5.exit_code, 0)
         self.assertIn("test_net", result5.output)
 
         # 6. Non-matching CIDR -> should output No matching networks found
-        result6 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--cidr", "10.0.0.0/24"])
+        result6 = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--cidr", "10.0.0.0/24"])
         self.assertEqual(result6.exit_code, 0)
         self.assertIn("No matching networks found.", result6.output)
 
         # 7. Matching IP containment -> should list
-        result7 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--ip", "192.168.100.50"])
+        result7 = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--ip", "192.168.100.50"])
         self.assertEqual(result7.exit_code, 0)
         self.assertIn("test_net", result7.output)
 
         # 8. Non-matching IP containment -> should output No matching networks found
-        result8 = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--ip", "10.0.1.100"])
+        result8 = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--ip", "10.0.1.100"])
         self.assertEqual(result8.exit_code, 0)
         self.assertIn("No matching networks found.", result8.output)
 
     def test_list_with_no_wrap(self):
         # Assert the CLI accepts the --no-wrap flag without errors
-        result = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--no-wrap"])
+        result = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--no-wrap"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("test_net", result.output)
 
+    @unittest.mock.patch("net_mgmt.cli.Console")
+    @unittest.mock.patch("sys.stdout.isatty", return_value=False)
+    def test_list_not_a_tty_width(self, mock_isatty, mock_console):
+        result = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir])
+        self.assertEqual(result.exit_code, 0)
+        mock_console.assert_called_with(width=9999)
+
+    @unittest.mock.patch("net_mgmt.cli.Console")
+    @unittest.mock.patch("sys.stdout.isatty", return_value=False)
+    def test_show_not_a_tty_width(self, mock_isatty, mock_console):
+        result = self.runner.invoke(cli, ["show", "--path", self.networks_dir, "test_net"])
+        self.assertEqual(result.exit_code, 0)
+        mock_console.assert_called_with(width=9999)
+
     def test_list_formats(self):
         # 1. Test JSON format
-        result_json = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--format", "json"])
+        result_json = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--format", "json"])
         self.assertEqual(result_json.exit_code, 0)
         self.assertIn("192.168.100.0/24", result_json.output)
         self.assertIn('"name": "test_net"', result_json.output)
 
         # 2. Test CSV format
-        result_csv = self.runner.invoke(cli, ["list", "--path", self.networks_dir, "--format", "csv"])
+        result_csv = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir, "--format", "csv"])
         self.assertEqual(result_csv.exit_code, 0)
         self.assertIn("Name,CIDR,Context,Datacenter,Zone,Environment,MTU,Description", result_csv.output)
         self.assertIn("test_net,192.168.100.0/24", result_csv.output)
@@ -140,7 +166,7 @@ class TestCliListEmpty(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def test_list_empty(self):
-        result = self.runner.invoke(cli, ["list", "--path", self.networks_dir])
+        result = self.runner.invoke(cli, ["list", "networks", "--path", self.networks_dir])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("No networks found.", result.output)
 
@@ -154,23 +180,6 @@ class TestCliEdit(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.test_dir)
-
-    @unittest.mock.patch("subprocess.run")
-    def test_edit_network_legacy(self, mock_run):
-        # Create a network file
-        net_file = os.path.join(self.networks_dir, "test_net.yaml")
-        with open(net_file, "w") as f:
-            f.write("cidr: 10.0.0.0/24")
-
-        # Mock env EDITOR
-        import os as local_os
-
-        with unittest.mock.patch.dict(local_os.environ, {"EDITOR": "nano"}):
-            result = self.runner.invoke(cli, ["edit", "network", "test_net", "--path", self.networks_dir])
-            self.assertEqual(result.exit_code, 0)
-            self.assertIn("Opening", result.output)
-            self.assertIn("nano", result.output)
-            mock_run.assert_called_once_with(["nano", net_file], check=True)
 
     @unittest.mock.patch("subprocess.run")
     def test_edit_network_relational(self, mock_run):
@@ -197,6 +206,9 @@ class TestCliFormat(unittest.TestCase):
     def setUp(self):
         self.runner = CliRunner()
         self.test_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.test_dir, "datacenters"), exist_ok=True)
+        with open(os.path.join(self.test_dir, "datacenters", "DC1.yaml"), "w") as f:
+            f.write("{}")
 
     def tearDown(self):
         shutil.rmtree(self.test_dir)
@@ -342,6 +354,56 @@ description: "Net 2"
         dc_idx = [i for i, line in enumerate(lines) if "datacenter:" in line][0]
         self.assertTrue(cidr_idx < desc_idx)
         self.assertTrue(desc_idx < dc_idx)
+
+
+class TestCliListLevels(unittest.TestCase):
+    def setUp(self):
+        self.runner = CliRunner()
+        self.test_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.test_dir, "networks"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "datacenters"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "zones"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "environments"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "bridge_domains"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "epgs"), exist_ok=True)
+
+        with open(os.path.join(self.test_dir, "datacenters", "DC1.yaml"), "w") as f:
+            f.write("timeservers:\n  - 1.1.1.1\ndns_nameservers:\n  - 8.8.8.8\n")
+        with open(os.path.join(self.test_dir, "zones", "DMZ.yaml"), "w") as f:
+            f.write("dns_search:\n  - dmz.local\n")
+        with open(os.path.join(self.test_dir, "environments", "prod.yaml"), "w") as f:
+            f.write("{}")
+        with open(os.path.join(self.test_dir, "bridge_domains", "BD1.yaml"), "w") as f:
+            f.write("datacenter: DC1\nzone: DMZ\n")
+        with open(os.path.join(self.test_dir, "epgs", "EPG1.yaml"), "w") as f:
+            f.write("bridge_domain: BD1\nenvironment: prod\nvlan: 100\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    def test_list_different_levels(self):
+        # 1. Test listing datacenters
+        result = self.runner.invoke(cli, ["list", "datacenters", "--path", self.test_dir])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("DC1", result.output)
+        self.assertIn("1.1.1.1", result.output)
+
+        # 2. Test aliases (e.g. bd, bridge-domain)
+        result_bd = self.runner.invoke(cli, ["list", "bd", "--path", self.test_dir])
+        self.assertEqual(result_bd.exit_code, 0)
+        self.assertIn("BD1", result_bd.output)
+        self.assertIn("DC1", result_bd.output)
+
+        # 3. Test list formats (JSON)
+        result_json = self.runner.invoke(cli, ["list", "epgs", "--path", self.test_dir, "--format", "json"])
+        self.assertEqual(result_json.exit_code, 0)
+        self.assertIn("EPG1", result_json.output)
+        self.assertIn('"vlan": 100', result_json.output)
+
+        # 4. Test error on unknown level
+        result_err = self.runner.invoke(cli, ["list", "unknown-level", "--path", self.test_dir])
+        self.assertNotEqual(result_err.exit_code, 0)
+        self.assertIn("Error: Unknown hierarchical level", result_err.output)
 
 
 if __name__ == "__main__":

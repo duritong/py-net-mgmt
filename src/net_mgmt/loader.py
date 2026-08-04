@@ -74,369 +74,192 @@ def load_network_from_file(file_path: str) -> Network:
     return network
 
 
-def apply_hierarchy_config(networks: List[Network], directory: str):
-    """
-    Parse networks/hierarchy.yaml (or hierarchy.yml) and apply inheritance to networks.
-    """
-    hierarchy_path = None
-    for f in ["hierarchy.yaml", "hierarchy.yml"]:
-        p = os.path.join(directory, f)
-        if os.path.exists(p):
-            hierarchy_path = p
-            break
-
-    if not hierarchy_path:
-        return
-
-    with open(hierarchy_path, "r", encoding="utf-8") as f:
-        try:
-            config = yaml.safe_load(f)
-        except Exception:
-            return
-
-    if not config or "datacenters" not in config:
-        return
-
-    net_map = {net.name: net for net in networks}
-
-    def traverse(node, context_attrs):
-        current_attrs = context_attrs.copy()
-        for attr in ["timeservers", "dns_nameservers", "dns_search", "default_mtu", "routable", "context"]:
-            if attr in node:
-                current_attrs[attr] = node[attr]
-
-        if "datacenters" in node:
-            for dc_name, dc_node in node["datacenters"].items():
-                dc_attrs = current_attrs.copy()
-                dc_attrs["datacenter"] = dc_name
-                traverse(dc_node, dc_attrs)
-            return
-
-        if "zones" in node:
-            for zone_name, zone_node in node["zones"].items():
-                zone_attrs = current_attrs.copy()
-                zone_attrs["zone"] = zone_name
-                traverse(zone_node, zone_attrs)
-            return
-
-        if "bridge_domains" in node:
-            for bd_name, bd_node in node["bridge_domains"].items():
-                bd_attrs = current_attrs.copy()
-                bd_attrs["bridge_domain"] = bd_name
-                traverse(bd_node, bd_attrs)
-            return
-
-        if "environments" in node:
-            for env_name, env_node in node["environments"].items():
-                env_attrs = current_attrs.copy()
-                env_attrs["environment"] = env_name
-                traverse(env_node, env_attrs)
-            return
-
-        if "epgs" in node:
-            for epg_name, epg_node in node["epgs"].items():
-                epg_attrs = current_attrs.copy()
-                epg_attrs["epg"] = epg_name
-                traverse(epg_node, epg_attrs)
-            return
-
-        if "networks" in node:
-            for net_name in node["networks"]:
-                if net_name in net_map:
-                    apply_to_network(net_map[net_name], current_attrs)
-
-    def apply_to_network(net: Network, attrs: dict):
-        if not net.datacenter and "datacenter" in attrs:
-            net.datacenter = attrs["datacenter"]
-        if not net.zone and "zone" in attrs:
-            net.zone = attrs["zone"]
-        if not net.bridge_domain and "bridge_domain" in attrs:
-            net.bridge_domain = attrs["bridge_domain"]
-        if not net.environment and "environment" in attrs:
-            net.environment = attrs["environment"]
-        if not net.epg and "epg" in attrs:
-            net.epg = attrs["epg"]
-
-        if not net.timeservers and "timeservers" in attrs:
-            net.timeservers = attrs["timeservers"]
-        if not net.dns_nameservers and "dns_nameservers" in attrs:
-            net.dns_nameservers = attrs["dns_nameservers"]
-        if not net.dns_search and "dns_search" in attrs:
-            net.dns_search = attrs["dns_search"]
-        if net.default_mtu is None and "default_mtu" in attrs:
-            net.default_mtu = attrs["default_mtu"]
-        if "routable" in attrs and net.routable is True:
-            net.routable = attrs["routable"]
-        if net.context == "default" and "context" in attrs:
-            net.context = attrs["context"]
-
-    traverse(config, {})
-
-    for net in networks:
-        if net.datacenter:
-            dc_node = config["datacenters"].get(net.datacenter)
-            if dc_node:
-                attrs = {"datacenter": net.datacenter}
-                for attr in ["timeservers", "dns_nameservers", "dns_search", "default_mtu", "routable", "context"]:
-                    if attr in dc_node:
-                        attrs[attr] = dc_node[attr]
-
-                if net.zone and "zones" in dc_node:
-                    zone_node = dc_node["zones"].get(net.zone)
-                    if zone_node:
-                        attrs["zone"] = net.zone
-                        for attr in [
-                            "timeservers",
-                            "dns_nameservers",
-                            "dns_search",
-                            "default_mtu",
-                            "routable",
-                            "context",
-                        ]:
-                            if attr in zone_node:
-                                attrs[attr] = zone_node[attr]
-
-                        if net.bridge_domain and "bridge_domains" in zone_node:
-                            bd_node = zone_node["bridge_domains"].get(net.bridge_domain)
-                            if bd_node:
-                                attrs["bridge_domain"] = net.bridge_domain
-                                for attr in [
-                                    "timeservers",
-                                    "dns_nameservers",
-                                    "dns_search",
-                                    "default_mtu",
-                                    "routable",
-                                    "context",
-                                ]:
-                                    if attr in bd_node:
-                                        attrs[attr] = bd_node[attr]
-
-                                if net.environment and "environments" in bd_node:
-                                    env_node = bd_node["environments"].get(net.environment)
-                                    if env_node:
-                                        attrs["environment"] = net.environment
-                                        for attr in [
-                                            "timeservers",
-                                            "dns_nameservers",
-                                            "dns_search",
-                                            "default_mtu",
-                                            "routable",
-                                            "context",
-                                        ]:
-                                            if attr in env_node:
-                                                attrs[attr] = env_node[attr]
-
-                                        if net.epg and "epgs" in env_node:
-                                            epg_node = env_node["epgs"].get(net.epg)
-                                            if epg_node:
-                                                attrs["epg"] = net.epg
-                                                for attr in [
-                                                    "timeservers",
-                                                    "dns_nameservers",
-                                                    "dns_search",
-                                                    "default_mtu",
-                                                    "routable",
-                                                    "context",
-                                                ]:
-                                                    if attr in epg_node:
-                                                        attrs[attr] = epg_node[attr]
-
-                apply_to_network(net, attrs)
-
-
 def load_all_networks(directory: str) -> List[Network]:
     errors = []
-    if is_relational_mode(directory):
-        # Relational Multi-Folder Database loading
-        datacenters = load_yaml_files_from_subdir(directory, "datacenters")
-        zones = load_yaml_files_from_subdir(directory, "zones")
-        environments = load_yaml_files_from_subdir(directory, "environments")
-        bridge_domains = load_yaml_files_from_subdir(directory, "bridge_domains")
-        epgs = load_yaml_files_from_subdir(directory, "epgs")
+    if not is_relational_mode(directory):
+        raise DatabaseValidationError(
+            ["Database is not in Relational Multi-Folder format (networks/ folder is required)."]
+        )
 
-        networks = []
+    if os.path.isdir(os.path.join(directory, "networks")):
+        db_dir = directory
         net_dir = os.path.join(directory, "networks")
-        for file in os.listdir(net_dir):
-            if file.lower().endswith(".yaml"):  # Enforce standard .yaml extension!
-                file_path = os.path.join(net_dir, file)
-                try:
-                    networks.append(load_network_from_file(file_path))
-                except DatabaseValidationError as e:
-                    errors.extend(e.errors)
-                except ValueError as e:
-                    errors.append(f"[{file}] {e}")
+    else:
+        db_dir = os.path.dirname(directory)
+        net_dir = directory
 
-        # Validate and apply relationships/metadata resolution cascade
-        for net in networks:
-            # 1. ForeignKey Integrity and Strict validations for epg
-            if net.epg:
-                if net.epg not in epgs:
-                    errors.append(
-                        f"ForeignKey Integrity: EPG '{net.epg}' referenced by network '{net.name}' does not exist."
-                    )
-                    continue
-                epg_data = epgs[net.epg]
+    # Relational Multi-Folder Database loading
+    datacenters = load_yaml_files_from_subdir(db_dir, "datacenters")
+    zones = load_yaml_files_from_subdir(db_dir, "zones")
+    environments = load_yaml_files_from_subdir(db_dir, "environments")
+    bridge_domains = load_yaml_files_from_subdir(db_dir, "bridge_domains")
+    epgs = load_yaml_files_from_subdir(db_dir, "epgs")
 
-                # VLAN Match check
-                epg_vlan = epg_data.get("vlan")
-                if net.vlan is not None and epg_vlan is not None and net.vlan != epg_vlan:
-                    errors.append(
-                        f"VLAN Match check: Network '{net.name}' defines vlan {net.vlan} "
-                        f"which conflicts with EPG '{net.epg}' vlan {epg_vlan}."
-                    )
-                if net.vlan is None:
-                    net.vlan = epg_vlan
+    networks = []
+    for file in os.listdir(net_dir):
+        if file.lower().endswith(".yaml"):  # Enforce standard .yaml extension!
+            file_path = os.path.join(net_dir, file)
+            try:
+                networks.append(load_network_from_file(file_path))
+            except DatabaseValidationError as e:
+                errors.extend(e.errors)
+            except ValueError as e:
+                errors.append(f"[{file}] {e}")
 
-                # Bridge Domain Match check
-                epg_bd = epg_data.get("bridge_domain")
-                if net.bridge_domain is not None and epg_bd is not None and net.bridge_domain != epg_bd:
-                    errors.append(
-                        f"Bridge Domain Match check: Network '{net.name}' defines bridge_domain "
-                        f"'{net.bridge_domain}' which conflicts with EPG '{net.epg}' "
-                        f"bridge_domain '{epg_bd}'."
-                    )
-                if net.bridge_domain is None:
-                    net.bridge_domain = epg_bd
-
-                # Environment Match check
-                epg_env = epg_data.get("environment")
-                if net.environment is not None and epg_env is not None and net.environment != epg_env:
-                    errors.append(
-                        f"Environment Match check: Network '{net.name}' defines environment "
-                        f"'{net.environment}' which conflicts with EPG '{net.epg}' "
-                        f"environment '{epg_env}'."
-                    )
-                if net.environment is None:
-                    net.environment = epg_env
-
-            # 2. Network with bridge_domain must have an EPG (User's Decision #2!)
-            if net.bridge_domain is not None and net.epg is None:
+    # Validate and apply relationships/metadata resolution cascade
+    for net in networks:
+        # 1. ForeignKey Integrity and Strict validations for epg
+        if net.epg:
+            if net.epg not in epgs:
                 errors.append(
-                    f"Validation Error: Network '{net.name}' defines a bridge_domain "
-                    f"'{net.bridge_domain}' but does not have an epg defined."
+                    f"ForeignKey Integrity: EPG '{net.epg}' referenced by network '{net.name}' does not exist."
+                )
+                continue
+            epg_data = epgs[net.epg]
+
+            # VLAN Match check
+            epg_vlan = epg_data.get("vlan")
+            if net.vlan is not None and epg_vlan is not None and net.vlan != epg_vlan:
+                errors.append(
+                    f"VLAN Match check: Network '{net.name}' defines vlan {net.vlan} "
+                    f"which conflicts with EPG '{net.epg}' vlan {epg_vlan}."
+                )
+            if net.vlan is None:
+                net.vlan = epg_vlan
+
+            # Bridge Domain Match check
+            epg_bd = epg_data.get("bridge_domain")
+            if net.bridge_domain is not None and epg_bd is not None and net.bridge_domain != epg_bd:
+                errors.append(
+                    f"Bridge Domain Match check: Network '{net.name}' defines bridge_domain "
+                    f"'{net.bridge_domain}' which conflicts with EPG '{net.epg}' "
+                    f"bridge_domain '{epg_bd}'."
+                )
+            if net.bridge_domain is None:
+                net.bridge_domain = epg_bd
+
+            # Environment Match check
+            epg_env = epg_data.get("environment")
+            if net.environment is not None and epg_env is not None and net.environment != epg_env:
+                errors.append(
+                    f"Environment Match check: Network '{net.name}' defines environment "
+                    f"'{net.environment}' which conflicts with EPG '{net.epg}' "
+                    f"environment '{epg_env}'."
+                )
+            if net.environment is None:
+                net.environment = epg_env
+
+        # 2. Network with bridge_domain must have an EPG (User's Decision #2!)
+        if net.bridge_domain is not None and net.epg is None:
+            errors.append(
+                f"Validation Error: Network '{net.name}' defines a bridge_domain "
+                f"'{net.bridge_domain}' but does not have an epg defined."
+            )
+
+        # 3. ForeignKey Integrity and Strict validations for bridge_domain
+        if net.bridge_domain:
+            if net.bridge_domain not in bridge_domains:
+                errors.append(
+                    f"ForeignKey Integrity: Bridge Domain '{net.bridge_domain}' "
+                    f"referenced by network '{net.name}' does not exist."
+                )
+                continue
+            bd_data = bridge_domains[net.bridge_domain]
+
+            # Datacenter Match check
+            bd_dc = bd_data.get("datacenter")
+            if net.datacenter is not None and bd_dc is not None and net.datacenter != bd_dc:
+                errors.append(
+                    f"Datacenter Match check: Network '{net.name}' defines datacenter "
+                    f"'{net.datacenter}' which conflicts with Bridge Domain '{net.bridge_domain}' "
+                    f"datacenter '{bd_dc}'."
+                )
+            if net.datacenter is None:
+                net.datacenter = bd_dc
+
+            # Zone Match check
+            bd_zone = bd_data.get("zone")
+            if net.zone is not None and bd_zone is not None and net.zone != bd_zone:
+                errors.append(
+                    f"Zone Match check: Network '{net.name}' defines zone '{net.zone}' "
+                    f"which conflicts with Bridge Domain '{net.bridge_domain}' zone '{bd_zone}'."
+                )
+            if net.zone is None:
+                net.zone = bd_zone
+
+        # 4. ForeignKey Integrity for environment
+        if net.environment:
+            if net.environment not in environments:
+                errors.append(
+                    f"ForeignKey Integrity: Environment '{net.environment}' "
+                    f"referenced by network '{net.name}' does not exist."
                 )
 
-            # 3. ForeignKey Integrity and Strict validations for bridge_domain
-            if net.bridge_domain:
-                if net.bridge_domain not in bridge_domains:
-                    errors.append(
-                        f"ForeignKey Integrity: Bridge Domain '{net.bridge_domain}' "
-                        f"referenced by network '{net.name}' does not exist."
-                    )
-                    continue
-                bd_data = bridge_domains[net.bridge_domain]
+        # 5. ForeignKey Integrity for datacenter
+        if net.datacenter:
+            if net.datacenter not in datacenters:
+                errors.append(
+                    f"ForeignKey Integrity: Datacenter '{net.datacenter}' "
+                    f"referenced by network '{net.name}' does not exist."
+                )
 
-                # Datacenter Match check
-                bd_dc = bd_data.get("datacenter")
-                if net.datacenter is not None and bd_dc is not None and net.datacenter != bd_dc:
-                    errors.append(
-                        f"Datacenter Match check: Network '{net.name}' defines datacenter "
-                        f"'{net.datacenter}' which conflicts with Bridge Domain '{net.bridge_domain}' "
-                        f"datacenter '{bd_dc}'."
-                    )
-                if net.datacenter is None:
-                    net.datacenter = bd_dc
+        # 6. ForeignKey Integrity for zone
+        if net.zone:
+            if net.zone not in zones:
+                errors.append(
+                    f"ForeignKey Integrity: Zone '{net.zone}' referenced by network '{net.name}' does not exist."
+                )
 
-                # Zone Match check
-                bd_zone = bd_data.get("zone")
-                if net.zone is not None and bd_zone is not None and net.zone != bd_zone:
-                    errors.append(
-                        f"Zone Match check: Network '{net.name}' defines zone '{net.zone}' "
-                        f"which conflicts with Bridge Domain '{net.bridge_domain}' zone '{bd_zone}'."
-                    )
-                if net.zone is None:
-                    net.zone = bd_zone
+        # 7. Metadata Resolution Cascade (Attribute Resolution Cascade)
+        for field_name in ["timeservers", "dns_nameservers", "dns_search", "default_mtu"]:
+            val = getattr(net, field_name, None)
+            if val is not None:
+                continue  # Already has local override
 
-            # 4. ForeignKey Integrity for environment
-            if net.environment:
-                if net.environment not in environments:
-                    errors.append(
-                        f"ForeignKey Integrity: Environment '{net.environment}' "
-                        f"referenced by network '{net.name}' does not exist."
-                    )
-
-            # 5. ForeignKey Integrity for datacenter
-            if net.datacenter:
-                if net.datacenter not in datacenters:
-                    errors.append(
-                        f"ForeignKey Integrity: Datacenter '{net.datacenter}' "
-                        f"referenced by network '{net.name}' does not exist."
-                    )
-
-            # 6. ForeignKey Integrity for zone
-            if net.zone:
-                if net.zone not in zones:
-                    errors.append(
-                        f"ForeignKey Integrity: Zone '{net.zone}' referenced by network '{net.name}' does not exist."
-                    )
-
-            # 7. Metadata Resolution Cascade (Attribute Resolution Cascade)
-            for field_name in ["timeservers", "dns_nameservers", "dns_search", "default_mtu"]:
-                val = getattr(net, field_name, None)
+            if net.epg and net.epg in epgs:
+                val = epgs[net.epg].get(field_name)
                 if val is not None:
-                    continue  # Already has local override
+                    setattr(net, field_name, val)
+                    continue
 
-                if net.epg and net.epg in epgs:
-                    val = epgs[net.epg].get(field_name)
-                    if val is not None:
-                        setattr(net, field_name, val)
-                        continue
+            if net.environment and net.environment in environments:
+                val = environments[net.environment].get(field_name)
+                if val is not None:
+                    setattr(net, field_name, val)
+                    continue
 
-                if net.environment and net.environment in environments:
-                    val = environments[net.environment].get(field_name)
-                    if val is not None:
-                        setattr(net, field_name, val)
-                        continue
+            if net.bridge_domain and net.bridge_domain in bridge_domains:
+                val = bridge_domains[net.bridge_domain].get(field_name)
+                if val is not None:
+                    setattr(net, field_name, val)
+                    continue
 
-                if net.bridge_domain and net.bridge_domain in bridge_domains:
-                    val = bridge_domains[net.bridge_domain].get(field_name)
-                    if val is not None:
-                        setattr(net, field_name, val)
-                        continue
+            if net.zone and net.zone in zones:
+                val = zones[net.zone].get(field_name)
+                if val is not None:
+                    setattr(net, field_name, val)
+                    continue
 
-                if net.zone and net.zone in zones:
-                    val = zones[net.zone].get(field_name)
-                    if val is not None:
-                        setattr(net, field_name, val)
-                        continue
+            if net.datacenter and net.datacenter in datacenters:
+                val = datacenters[net.datacenter].get(field_name)
+                if val is not None:
+                    setattr(net, field_name, val)
+                    continue
 
-                if net.datacenter and net.datacenter in datacenters:
-                    val = datacenters[net.datacenter].get(field_name)
-                    if val is not None:
-                        setattr(net, field_name, val)
-                        continue
-
-        if errors:
-            raise DatabaseValidationError(errors)
-        return networks
-    else:
-        # Legacy flat structure with hierarchy.yaml
-        networks = []
-        for root, _, files in os.walk(directory):
-            for file in files:
-                if file.endswith(".yaml") or file.endswith(".yml"):
-                    if file in ("hierarchy.yaml", "hierarchy.yml"):
-                        continue
-                    try:
-                        networks.append(load_network_from_file(os.path.join(root, file)))
-                    except DatabaseValidationError as e:
-                        errors.extend(e.errors)
-                    except ValueError as e:
-                        errors.append(f"[{file}] {e}")
-        apply_hierarchy_config(networks, directory)
-        if errors:
-            raise DatabaseValidationError(errors)
-        return networks
+    if errors:
+        raise DatabaseValidationError(errors)
+    return networks
 
 
 def is_relational_mode(directory: str) -> bool:
-    # Check if 'networks' and at least one other directory exists under the target path
-    has_networks = os.path.isdir(os.path.join(directory, "networks"))
-    has_others = any(
-        os.path.isdir(os.path.join(directory, d))
-        for d in ["epgs", "bridge_domains", "environments", "zones", "datacenters"]
-    )
-    return has_networks and has_others
+    # Check if 'networks' directory exists under the target path
+    if os.path.isdir(os.path.join(directory, "networks")):
+        return True
+    # Or if the directory name itself contains 'network'
+    basename = os.path.basename(os.path.abspath(directory)).lower()
+    if "network" in basename and os.path.isdir(directory):
+        return True
+    return False
 
 
 def load_yaml_files_from_subdir(directory: str, subdir: str) -> dict:
@@ -466,7 +289,6 @@ def save_network_to_file(network: Network):
         raise ValueError("Network has no file path associated with it.")
 
     db_dir = os.path.dirname(os.path.dirname(network.file_path))
-    relational = is_relational_mode(db_dir)
 
     # We open the file in append mode just to get a file descriptor for locking
     # without truncating it yet.
@@ -499,7 +321,7 @@ def save_network_to_file(network: Network):
             inherited_zone = None
             inherited_metadata = {"timeservers": None, "dns_nameservers": None, "dns_search": None, "default_mtu": None}
 
-            if relational:
+            if True:
                 # Load relational databases for this DB directory
                 datacenters = load_yaml_files_from_subdir(db_dir, "datacenters")
                 zones = load_yaml_files_from_subdir(db_dir, "zones")
@@ -533,7 +355,7 @@ def save_network_to_file(network: Network):
                         val = datacenters[inherited_dc].get(field_name)
                     inherited_metadata[field_name] = val
 
-            if relational:
+            if True:
                 if network.epg:
                     data["epg"] = network.epg
                 if network.vlan is not None and (network.epg is None or network.vlan != inherited_vlan):
@@ -552,28 +374,6 @@ def save_network_to_file(network: Network):
                     val = getattr(network, field_name, None)
                     if val is not None and val != inherited_metadata[field_name]:
                         data[field_name] = val
-            else:
-                # Legacy flat structure direct write
-                if network.vlan is not None:
-                    data["vlan"] = network.vlan
-                if network.bridge_domain:
-                    data["bridge_domain"] = network.bridge_domain
-                if network.environment:
-                    data["environment"] = network.environment
-                if network.epg:
-                    data["epg"] = network.epg
-                if network.default_mtu is not None:
-                    data["default_mtu"] = network.default_mtu
-                if network.dns_nameservers:
-                    data["dns_nameservers"] = network.dns_nameservers
-                if network.dns_search:
-                    data["dns_search"] = network.dns_search
-                if network.timeservers:
-                    data["timeservers"] = network.timeservers
-                if network.zone:
-                    data["zone"] = network.zone
-                if network.datacenter:
-                    data["datacenter"] = network.datacenter
 
             if network.static_routes:
                 data["static_routes"] = [{"cidr": sr.cidr, "gateway": sr.gateway} for sr in network.static_routes]

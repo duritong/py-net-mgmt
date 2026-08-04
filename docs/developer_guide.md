@@ -38,8 +38,6 @@ When adding a new topological metadata field (e.g. adding `environment` or simil
    - Parse the key inside `load_network_from_file` using `data.get("new_field")`.
    - Persist the key inside `save_network_to_file` under `data["new_field"] = network.new_field`.
 3. **Update Centralized Hierarchy Inheritance**:
-   - If the new field belongs to the hierarchy, locate `apply_hierarchy_config` in `src/net_mgmt/loader.py` (for legacy `hierarchy.yaml`).
-   - Add it to the tree traversal loops so that it can be defined inside `hierarchy.yaml` and inherited by networks.
    - For **Relational Mode**, add it to the **Metadata Resolution Cascade** loop in `load_all_networks` and the **Pruning/Serialization** logic in `save_network_to_file` in `src/net_mgmt/loader.py` so that it is properly loaded, inherited, and dry-saved from relational entities.
 4. **Extend CLI & Markdown Reports**:
    - **`list` command**: Update the Table headers and row data inside `src/net_mgmt/cli.py` to display the new column.
@@ -101,3 +99,12 @@ class TestNewFeature(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 ```
+
+---
+
+## 5. Symmetrical Hierarchical Level Mandate
+
+All system operations, queries, and commands **must** support the Relational Multi-Folder hierarchy levels consistently and symmetrically.
+- **Relational Levels**: Datacenters, Zones, Environments, Bridge Domains, EPGs, and Networks.
+- **Symmetric Design**: Any operation (such as listing, checking schema/formatting, coordinate querying, and validation), where logically applicable, must support all of these levels rather than being restricted only to networks.
+- **Extensibility**: When extending or adding new commands or features, ensure they naturally scale to all of these levels.
