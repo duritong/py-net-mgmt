@@ -34,7 +34,7 @@ allocations:
         shutil.rmtree(self.test_dir)
 
     def test_show_order(self):
-        result = self.runner.invoke(cli, ["show", "test_net", "--path", self.networks_dir])
+        result = self.runner.invoke(cli, ["show", "networks", "test_net", "--path", self.networks_dir])
         if result.exit_code != 0:
             print(result.output)
         self.assertEqual(result.exit_code, 0)

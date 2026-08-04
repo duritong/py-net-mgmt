@@ -74,18 +74,27 @@ net-mgmt list networks -f csv
 ---
 
 ### Command: `show`
-Displays full structured details for a specific network (all metadata, active reservations, IP allocations, utilization statistics, and usable unreserved ranges). Supports structured format exports.
+Displays full structured details for a specific network or hierarchical entity (metadata fields, timeservers, static routes, reservations, allocations, and statistics). Supports structured format exports.
+
+#### Arguments & Aliases
+* `LEVEL` *(Required)*: The hierarchical level of the entity to show. Same abbreviations/aliases as `list` command are accepted.
+* `NAME` *(Required)*: The name of the specific entity to show.
+
+#### Options
 * `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
 
 ```bash
 # Show detailed tables of a network
-net-mgmt show backend_net
+net-mgmt show networks backend_net
 
-# Show network properties as detailed, structured JSON (includes all sub-arrays)
-net-mgmt show backend_net --format json
+# Show datacenter properties (using 'dc' abbreviation)
+net-mgmt show dc DC_Frankfurt
+
+# Show network properties as detailed, structured JSON
+net-mgmt show networks backend_net --format json
 
 # Show network allocations and pools as standard CSV rows
-net-mgmt show backend_net -f csv
+net-mgmt show networks backend_net -f csv
 ```
 
 ---

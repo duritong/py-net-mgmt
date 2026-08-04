@@ -137,7 +137,7 @@ default_mtu: 1500
     @unittest.mock.patch("net_mgmt.cli.Console")
     @unittest.mock.patch("sys.stdout.isatty", return_value=False)
     def test_show_not_a_tty_width(self, mock_isatty, mock_console):
-        result = self.runner.invoke(cli, ["show", "--path", self.networks_dir, "test_net"])
+        result = self.runner.invoke(cli, ["show", "networks", "test_net", "--path", self.networks_dir])
         self.assertEqual(result.exit_code, 0)
         mock_console.assert_called_with(width=9999)
 
@@ -200,6 +200,41 @@ class TestCliEdit(unittest.TestCase):
             self.assertIn("Opening", result.output)
             self.assertIn("vim", result.output)
             mock_run.assert_called_once_with(["vim", epg_file], check=True)
+
+    @unittest.mock.patch("subprocess.run")
+    def test_edit_validation_safety(self, mock_run):
+        # Relational folder structure
+        os.makedirs(os.path.join(self.test_dir, "epgs"), exist_ok=True)
+        os.makedirs(os.path.join(self.test_dir, "networks"), exist_ok=True)
+
+        epg_file = os.path.join(self.test_dir, "epgs", "EPG_App.yaml")
+        # Write initial valid file
+        with open(epg_file, "w") as f:
+            f.write("vlan: 10")
+
+        # Write network referencing EPG
+        with open(os.path.join(self.test_dir, "networks", "test_net.yaml"), "w") as f:
+            f.write("cidr: 10.0.0.0/24\nepg: EPG_App")
+
+        # Define mock behavior: when subprocess runs, write invalid EPG config (referencing non-existent bridge domain)
+        def write_invalid(*args, **kwargs):
+            with open(epg_file, "w") as f:
+                f.write("vlan: 10\nbridge_domain: BD_Nonexistent")
+
+        mock_run.side_effect = write_invalid
+
+        # Run edit command
+        result = self.runner.invoke(cli, ["edit", "epg", "EPG_App", "--path", self.test_dir])
+
+        # Verify changes were rejected and exit code is non-zero
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("Validation Error", result.output)
+        self.assertIn("net-mgmt-recovery-EPG_App-", result.output)
+
+        # Verify that original file was restored
+        with open(epg_file, "r") as f:
+            content = f.read()
+        self.assertEqual(content.strip(), "vlan: 10")
 
 
 class TestCliFormat(unittest.TestCase):

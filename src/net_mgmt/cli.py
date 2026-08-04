@@ -273,7 +273,8 @@ def list(
 
 
 @cli.command()
-@click.argument("name")
+@click.argument("level", type=str)
+@click.argument("name", type=str)
 @click.option(
     "--format",
     "-f",
@@ -282,14 +283,105 @@ def list(
     help="Output format (table, csv, json)",
 )
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-def show(name, format, path):
-    """Show details of a specific network"""
+def show(level, name, format, path):
+    """Show details of a specific network or hierarchical entity"""
+    alias_map = {
+        "networks": "networks",
+        "network": "networks",
+        "nets": "networks",
+        "net": "networks",
+        "bridge-domains": "bridge_domains",
+        "bridge-domain": "bridge_domains",
+        "bridgedomains": "bridge_domains",
+        "bridgedomain": "bridge_domains",
+        "bridge_domains": "bridge_domains",
+        "bridge_domain": "bridge_domains",
+        "bds": "bridge_domains",
+        "bd": "bridge_domains",
+        "datacenters": "datacenters",
+        "datacenter": "datacenters",
+        "dcs": "datacenters",
+        "dc": "datacenters",
+        "zones": "zones",
+        "zone": "zones",
+        "environments": "environments",
+        "environment": "environments",
+        "envs": "environments",
+        "env": "environments",
+        "epgs": "epgs",
+        "epg": "epgs",
+    }
+
+    normalized_level = alias_map.get(level.lower())
+    if not normalized_level:
+        click.echo(f"Error: Unknown hierarchical level '{level}'.")
+        exit(1)
+
     set_db_path(path)
     try:
         networks = get_database()
     except ValueError as e:
         click.echo(f"Validation Error: {e}")
         exit(1)
+
+    if normalized_level != "networks":
+        from .db import get_cached_entities
+
+        entities = get_cached_entities(normalized_level)
+
+        # Case-insensitive lookup of entity name
+        entity_key = next((k for k in entities if k.lower() == name.lower()), None)
+        if not entity_key:
+            level_label = level.rstrip("s")
+            click.echo(f"Error: {level_label.capitalize()} '{name}' not found.")
+            exit(1)
+
+        entity_data = entities[entity_key]
+
+        if format == "json":
+            import json
+
+            click.echo(json.dumps({"name": entity_key, **entity_data}, indent=2))
+            return
+
+        if format == "csv":
+            import csv
+            import sys
+
+            writer = csv.writer(sys.stdout)
+            writer.writerow(["Key", "Value"])
+            writer.writerow(["name", entity_key])
+            for k, v in sorted(entity_data.items()):
+                if isinstance(v, builtins.list):
+                    writer.writerow([k, ", ".join(map(str, v))])
+                else:
+                    writer.writerow([k, str(v) if v is not None else ""])
+            return
+
+        import sys
+
+        width = 9999 if not sys.stdout.isatty() else None
+        console = Console(width=width)
+        console.print(f"[bold cyan]Name:[/bold cyan] {entity_key}")
+        for k, v in sorted(entity_data.items()):
+            label = " ".join(part.capitalize() for part in k.split("_"))
+            if label == "Dns Nameservers":
+                label = "DNS Nameservers"
+            elif label == "Dns Search":
+                label = "DNS Search"
+            elif label == "Mtu":
+                label = "MTU"
+            elif label == "Vlan":
+                label = "VLAN"
+            elif label == "Epg":
+                label = "EPG"
+
+            if isinstance(v, builtins.list):
+                val_str = ", ".join(map(str, v))
+            else:
+                val_str = str(v) if v is not None else "None"
+            console.print(f"[bold cyan]{label}:[/bold cyan] {val_str}")
+        return
 
     network = next((n for n in networks if n.name == name), None)
 
@@ -722,12 +814,35 @@ def edit(entity_type, name, path):
     """Open the respective database file inside $EDITOR"""
     import subprocess
 
-    # Normalize entity type (e.g. network -> networks, bridge-domain -> bridge_domains)
-    normalized_type = entity_type.lower().replace("-", "_")
-    if not normalized_type.endswith("s"):
-        normalized_type += "s"
+    alias_map = {
+        "networks": "networks",
+        "network": "networks",
+        "nets": "networks",
+        "net": "networks",
+        "bridge-domains": "bridge_domains",
+        "bridge-domain": "bridge_domains",
+        "bridgedomains": "bridge_domains",
+        "bridgedomain": "bridge_domains",
+        "bridge_domains": "bridge_domains",
+        "bridge_domain": "bridge_domains",
+        "bds": "bridge_domains",
+        "bd": "bridge_domains",
+        "datacenters": "datacenters",
+        "datacenter": "datacenters",
+        "dcs": "datacenters",
+        "dc": "datacenters",
+        "zones": "zones",
+        "zone": "zones",
+        "environments": "environments",
+        "environment": "environments",
+        "envs": "environments",
+        "env": "environments",
+        "epgs": "epgs",
+        "epg": "epgs",
+    }
 
-    if normalized_type not in ["networks", "epgs", "bridge_domains", "datacenters", "zones", "environments"]:
+    normalized_type = alias_map.get(entity_type.lower())
+    if not normalized_type:
         click.echo(f"Error: Unknown entity type '{entity_type}'.")
         exit(1)
 
@@ -747,15 +862,82 @@ def edit(entity_type, name, path):
     # Scaffold the directory if missing
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
+    # 1. Read and backup the original content (if it exists)
+    original_exists = os.path.exists(file_path)
+    original_content = None
+    if original_exists:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                original_content = f.read()
+        except Exception:
+            pass
+
     # Resolve active editor from environment with safe terminal fallback
     editor = os.environ.get("EDITOR", "vi")
 
+    # 2. Launch the editor
     click.echo(f"Opening '{file_path}' in editor '{editor}'...")
     try:
         subprocess.run([editor, file_path], check=True)
     except Exception as e:
         click.echo(f"Error: Failed to launch editor '{editor}': {e}")
         exit(1)
+
+    # 3. Validation & Format Verification
+    set_db_path(path)
+    validation_failed = False
+    validation_error = None
+    try:
+        get_database(force_reload=True)
+    except Exception as e:
+        validation_failed = True
+        validation_error = e
+
+    if validation_failed:
+        # Read the invalid edited content
+        invalid_content = ""
+        try:
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    invalid_content = f.read()
+        except Exception:
+            pass
+
+        # Write to a temporary recovery file
+        import tempfile
+
+        try:
+            fd, recovery_path = tempfile.mkstemp(prefix=f"net-mgmt-recovery-{name}-", suffix=".yaml")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(invalid_content)
+        except Exception as tmp_err:
+            recovery_path = f"Failed to save recovery file: {tmp_err}"
+
+        # Restore original state
+        try:
+            if original_exists:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(original_content)
+                click.echo("Rejected invalid changes. Restored original file content.")
+            else:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                click.echo("Rejected invalid changes. Removed newly created file.")
+        except Exception as restore_err:
+            click.echo(f"Warning: Failed to restore original file state: {restore_err}")
+
+        # Print detailed validation error using rich Console
+        console = Console()
+        console.print(f"\n[bold red]Validation Error:[/bold red] {validation_error}")
+        console.print(f"Your modified content was rejected and saved to: [yellow]{recovery_path}[/yellow]")
+        exit(1)
+
+    # 4. If validated, apply proper formatting to the database files!
+    try:
+        run_format(path)
+        click.echo("Successfully validated and formatted the edited file.")
+    except Exception as fmt_err:
+        click.echo(f"Warning: Failed to format files: {fmt_err}")
 
 
 def run_format(path):
