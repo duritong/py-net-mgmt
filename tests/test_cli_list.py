@@ -440,6 +440,34 @@ class TestCliListLevels(unittest.TestCase):
         self.assertNotEqual(result_err.exit_code, 0)
         self.assertIn("Error: Unknown hierarchical level", result_err.output)
 
+    def test_list_sorting(self):
+        # Write multiple datacenters to test sorting
+        with open(os.path.join(self.test_dir, "datacenters", "DC3.yaml"), "w") as f:
+            f.write("timeservers:\n  - 3.3.3.3\n")
+        with open(os.path.join(self.test_dir, "datacenters", "DC2.yaml"), "w") as f:
+            f.write("timeservers:\n  - 2.2.2.2\n")
+
+        # 1. Default sorting should be alphabetical name: DC1, DC2, DC3
+        result_default = self.runner.invoke(cli, ["list", "datacenters", "--path", self.test_dir])
+        self.assertEqual(result_default.exit_code, 0)
+        output = result_default.output
+        dc1_pos = output.find("DC1")
+        dc2_pos = output.find("DC2")
+        dc3_pos = output.find("DC3")
+        self.assertTrue(dc1_pos < dc2_pos < dc3_pos)
+
+        # 2. Custom sorting by Timeservers descending? Or sorting by specific fields
+        # If we sort by timeservers, 1.1.1.1 (DC1) < 2.2.2.2 (DC2) < 3.3.3.3 (DC3)
+        result_custom = self.runner.invoke(
+            cli, ["list", "datacenters", "--path", self.test_dir, "--sort-by", "timeservers"]
+        )
+        self.assertEqual(result_custom.exit_code, 0)
+        output_custom = result_custom.output
+        dc1_pos = output_custom.find("DC1")
+        dc2_pos = output_custom.find("DC2")
+        dc3_pos = output_custom.find("DC3")
+        self.assertTrue(dc1_pos < dc2_pos < dc3_pos)
+
 
 if __name__ == "__main__":
     unittest.main()

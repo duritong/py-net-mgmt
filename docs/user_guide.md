@@ -53,13 +53,17 @@ Lists all networks or entities at a given hierarchical level (`networks`, `bridg
 #### Options
 * `--no-wrap`: Disables column text wrapping and truncation, forcing each entity row to output as a single, fully expanded line (perfect for piping/scripting or displaying long names). Note: This no-wrap behavior is automatically enabled when output is piped or redirected (not a TTY) to make command-line manipulation (such as grep) seamless.
 * `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
+* `--sort-by`, `--sort`: Comma-separated list of fields to sort the output by (e.g. `networks --sort-by datacenter,zone,vlan`). If omitted, output is sorted by default hierarchical cascades.
 
 ```bash
-# List all networks in tabular format
+# List all networks in tabular format (default hierarchical sort)
 net-mgmt list networks
 
-# List all bridge domains in tabular format
-net-mgmt list bridge-domains
+# List all networks sorted by VLAN and CIDR (numerical sorting automatically supported)
+net-mgmt list networks --sort-by vlan,cidr
+
+# List all bridge domains sorted by zone and datacenter
+net-mgmt list bridge-domains --sort-by zone,datacenter
 
 # List datacenters using abbreviation 'dc'
 net-mgmt list dc

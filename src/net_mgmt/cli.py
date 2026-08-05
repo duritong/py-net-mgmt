@@ -55,6 +55,7 @@ def validate(path, format):
     default="table",
     help="Output format (table, csv, json)",
 )
+@click.option("--sort-by", "--sort", default=None, help="Comma-separated list of fields to sort the output by")
 def list(
     level,
     path,
@@ -70,6 +71,7 @@ def list(
     context,
     no_wrap,
     format,
+    sort_by,
 ):
     """List available networks or hierarchical level entities with coordinate filtering"""
     alias_map = {
@@ -111,6 +113,51 @@ def list(
         click.echo(f"Validation Error: {e}")
         exit(1)
 
+    def sort_items(items, fields, is_dict=False):
+        """Sort a list of items (objects or key-value tuples) based on a list of fields."""
+
+        def get_val_for_field(item, field):
+            f = field.strip().lower().replace("-", "_")
+            if is_dict:
+                name, data = item
+                if f == "name":
+                    return name
+                val = data.get(f)
+            else:
+                if hasattr(item, f):
+                    val = getattr(item, f)
+                else:
+                    val = None
+
+            if val is None:
+                val = ""
+
+            # Check for CIDR or IP
+            if f == "cidr":
+                import ipaddress
+
+                try:
+                    net = ipaddress.ip_network(str(val), strict=False)
+                    return (0, net.network_address, net.prefixlen)
+                except Exception:
+                    pass
+            elif f in ["vlan", "default_mtu", "mtu"]:
+                try:
+                    return (0, int(val), "")
+                except Exception:
+                    return (1, 999999, str(val))
+
+            return (2 if isinstance(val, int) else 3, str(val).lower())
+
+        def sort_key(item):
+            return tuple(get_val_for_field(item, f) for f in fields)
+
+        return sorted(items, key=sort_key)
+
+    sort_fields = []
+    if sort_by:
+        sort_fields = [f.strip() for f in sort_by.split(",") if f.strip()]
+
     if normalized_level != "networks":
         from .db import get_cached_entities
 
@@ -120,6 +167,17 @@ def list(
             click.echo(f"No {normalized_level.replace('_', ' ')} found.")
             return
 
+        items = builtins.list(entities.items())
+        if not sort_fields:
+            if normalized_level == "bridge_domains":
+                sort_fields = ["datacenter", "zone", "name"]
+            elif normalized_level == "epgs":
+                sort_fields = ["bridge_domain", "environment", "name"]
+            else:
+                sort_fields = ["name"]
+
+        items = sort_items(items, sort_fields, is_dict=True)
+
         import sys
 
         no_wrap_effective = no_wrap or not sys.stdout.isatty()
@@ -127,7 +185,7 @@ def list(
         if format == "json":
             import json
 
-            click.echo(json.dumps([{"name": k, **v} for k, v in sorted(entities.items())], indent=2))
+            click.echo(json.dumps([{"name": k, **v} for k, v in items], indent=2))
             return
 
         # Determine headers & keys to display per level
@@ -152,7 +210,7 @@ def list(
 
             writer = csv.writer(sys.stdout)
             writer.writerow(headers)
-            for name, data in sorted(entities.items()):
+            for name, data in items:
                 row = [name]
                 for key in keys:
                     val = data.get(key, "")
@@ -175,7 +233,7 @@ def list(
             style = "cyan" if h == "Name" else "green" if "MTU" in h or "VLAN" in h else "magenta"
             table.add_column(h, style=style, no_wrap=no_wrap_effective)
 
-        for name, data in sorted(entities.items()):
+        for name, data in items:
             row_vals = [name]
             for key in keys:
                 val = data.get(key, "")
@@ -212,6 +270,11 @@ def list(
     if not networks:
         click.echo("No matching networks found.")
         return
+
+    # Sort networks by hierarchy default or custom sort fields
+    if not sort_fields:
+        sort_fields = ["datacenter", "zone", "environment", "bridge_domain", "epg", "name", "cidr"]
+    networks = sort_items(networks, sort_fields, is_dict=False)
 
     if format == "json":
         import json
