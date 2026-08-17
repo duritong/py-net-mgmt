@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from src.net_mgmt.core import Network
@@ -100,6 +101,100 @@ class TestFindOrAllocate(unittest.TestCase):
         # It should correctly skip 10.0.3.0 (which is allocated under cidr) and allocate 10.0.3.1!
         self.assertEqual(str(alloc.ip), "10.0.3.1")
         self.assertEqual(alloc.hostname, "other-host")
+
+    def test_find_or_allocate_persists_standard_yaml_formatting_and_indented_lists(self):
+        import shutil
+        import tempfile
+
+        from src.net_mgmt.loader import load_network_from_file
+
+        test_dir = tempfile.mkdtemp()
+        try:
+            networks_dir = os.path.join(test_dir, "networks")
+            os.makedirs(networks_dir)
+            net_file = os.path.join(networks_dir, "app_net.yaml")
+            with open(net_file, "w", encoding="utf-8") as f:
+                f.write(
+                    "# App Network Header\n"
+                    "cidr: 10.0.0.0/24\n"
+                    "description: Test app network\n"
+                    "# Reservation section\n"
+                    "reservations:\n"
+                    "  - id: pool1\n"
+                    "    cidr: 10.0.0.0/28\n"
+                    "    allocatable: true\n"
+                )
+
+            net = load_network_from_file(net_file)
+            net.find_or_allocate_hostname("web01.internal")
+            net.find_or_allocate_range("db-cluster", 2)
+
+            with open(net_file, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Verify list elements have 2-space indentation under reservations and allocations
+            self.assertIn("reservations:\n  - id: pool1", content)
+            self.assertIn("allocations:\n  - ip: 10.0.0.7\n    hostname: web01.internal", content)
+            self.assertIn("  - cidr: 10.0.0.8-10.0.0.9\n    comment: db-cluster", content)
+
+            # Verify comments preserved
+            self.assertIn("# App Network Header", content)
+            self.assertIn("# Reservation section", content)
+
+            # Verify key ordering: cidr -> description -> reservations -> allocations
+            lines = content.splitlines()
+            cidr_idx = next(i for i, line in enumerate(lines) if "cidr: 10.0.0.0/24" in line)
+            desc_idx = next(i for i, line in enumerate(lines) if "description: Test app network" in line)
+            res_idx = next(i for i, line in enumerate(lines) if "reservations:" in line)
+            alloc_idx = next(i for i, line in enumerate(lines) if "allocations:" in line)
+            self.assertTrue(cidr_idx < desc_idx < res_idx < alloc_idx)
+            # Verify format idempotency: running net-mgmt format should skip because it is already formatted!
+            from click.testing import CliRunner
+
+            from src.net_mgmt.cli import cli
+
+            runner = CliRunner()
+            fmt_result = runner.invoke(cli, ["format", "--path", networks_dir])
+            self.assertEqual(fmt_result.exit_code, 0)
+            self.assertIn("Formatted: 0 file(s)", fmt_result.output)
+            self.assertIn("Skipped: 1 file(s)", fmt_result.output)
+        finally:
+            shutil.rmtree(test_dir)
+
+    def test_find_or_allocate_preserves_inline_item_comments(self):
+        import shutil
+        import tempfile
+
+        from src.net_mgmt.loader import load_network_from_file
+
+        test_dir = tempfile.mkdtemp()
+        try:
+            networks_dir = os.path.join(test_dir, "networks")
+            os.makedirs(networks_dir)
+            net_file = os.path.join(networks_dir, "app_net.yaml")
+            with open(net_file, "w", encoding="utf-8") as f:
+                f.write(
+                    "cidr: 10.0.0.0/24\n"
+                    "reservations:\n"
+                    "  - id: pool1 # Pool 1 inline comment\n"
+                    "    cidr: 10.0.0.0/28\n"
+                    "    allocatable: true\n"
+                    "allocations:\n"
+                    "  - ip: 10.0.0.7 # First host comment\n"
+                    "    hostname: existing-host\n"
+                )
+
+            net = load_network_from_file(net_file)
+            net.find_or_allocate_hostname("new-host")
+
+            with open(net_file, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("# Pool 1 inline comment", content)
+            self.assertIn("# First host comment", content)
+            self.assertIn("hostname: new-host", content)
+        finally:
+            shutil.rmtree(test_dir)
 
 
 if __name__ == "__main__":

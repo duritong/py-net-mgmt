@@ -1,9 +1,12 @@
 import fcntl
+import io
 import ipaddress
 import os
 from typing import List
 
 import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .core import Allocation, DatabaseValidationError, Network, Reservation
 
@@ -283,117 +286,279 @@ def load_yaml_files_from_subdir(directory: str, subdir: str) -> dict:
     return result
 
 
+def get_yaml_handler() -> YAML:
+    yaml_rt = YAML(typ="rt")
+    yaml_rt.preserve_quotes = True
+    yaml_rt.indent(mapping=2, sequence=4, offset=2)
+    yaml_rt.width = 120
+    return yaml_rt
+
+
+def get_item_start_ip(item):
+    val = item.get("cidr") or item.get("ip")
+    if not val:
+        comment_val = item.get("comment", "")
+        return (ipaddress.ip_address("255.255.255.255"), comment_val)
+    val_str = str(val).split("-")[0].strip()
+    try:
+        return (ipaddress.ip_address(val_str), "")
+    except ValueError:
+        try:
+            return (ipaddress.ip_network(val_str, strict=False).network_address, "")
+        except ValueError:
+            return (ipaddress.ip_address("255.255.255.255"), val_str)
+
+
+def format_yaml_node(node):
+    if isinstance(node, (CommentedMap, dict)):
+        cmap_keys = list(node.keys())
+        sorted_keys = []
+
+        primary_order = [
+            "id",
+            "cidr",
+            "ip",
+            "hostname",
+            "description",
+            "comment",
+            "epg",
+            "environment",
+            "datacenter",
+            "zone",
+            "bridge_domain",
+        ]
+        for field in primary_order:
+            if field in cmap_keys:
+                sorted_keys.append(field)
+
+        last_keys = []
+        for last_key in ["reservations", "allocations"]:
+            if last_key in cmap_keys:
+                last_keys.append(last_key)
+
+        other = []
+        for k in cmap_keys:
+            if k not in sorted_keys and k not in last_keys:
+                other.append(k)
+        other.sort()
+
+        all_sorted_keys = sorted_keys + other + last_keys
+
+        for k in all_sorted_keys:
+            node[k] = format_yaml_node(node[k])
+
+        new_map = CommentedMap()
+        if hasattr(node, "ca") and node.ca:
+            new_map.ca.comment = node.ca.comment
+        for k in all_sorted_keys:
+            new_map[k] = node[k]
+            if hasattr(node, "ca") and k in node.ca.items:
+                new_map.ca.items[k] = node.ca.items[k]
+        return new_map
+
+    elif isinstance(node, (CommentedSeq, list)):
+        if len(node) > 0 and isinstance(node[0], (CommentedMap, dict)):
+            is_reservations = "cidr" in node[0] and "id" in node[0]
+            is_allocations = "ip" in node[0] or "cidr" in node[0]
+            if is_reservations or is_allocations:
+                node = sorted(node, key=get_item_start_ip)
+
+        new_seq = CommentedSeq()
+        if hasattr(node, "ca") and node.ca:
+            new_seq.ca.comment = node.ca.comment
+        for i, item in enumerate(node):
+            formatted_item = format_yaml_node(item)
+            new_seq.append(formatted_item)
+            if hasattr(node, "ca") and i in node.ca.items:
+                new_seq.ca.items[i] = node.ca.items[i]
+        return new_seq
+
+    return node
+
+
 def save_network_to_file(network: Network):
-    """Save network configuration back to its YAML file."""
+    """Save network configuration back to its YAML file using standard formatting."""
     if not network.file_path:
         raise ValueError("Network has no file path associated with it.")
 
     db_dir = os.path.dirname(os.path.dirname(network.file_path))
 
-    # We open the file in append mode just to get a file descriptor for locking
-    # without truncating it yet.
     with open(network.file_path, "a+") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             lock_file.seek(0)
+            original_content = lock_file.read()
 
-            # Read all full-line comments to preserve them at the top
-            comments = []
-            for line in lock_file:
-                if line.lstrip().startswith("#"):
-                    comments.append(line)
+            yaml_rt = get_yaml_handler()
+            data = None
+            if original_content.strip():
+                try:
+                    data = yaml_rt.load(original_content)
+                except Exception:
+                    data = None
 
-            data = {
-                "cidr": str(network.cidr),
-                "routable": network.routable,
-                "reserve_gateway": network.reserve_gateway,
-                "reserve_internal": network.reserve_internal,
-                "reserve_internal_until": network.reserve_internal_until,
-            }
+            if data is None or not isinstance(data, (CommentedMap, dict)):
+                data = CommentedMap()
 
-            if network.context != "default":
+            data["cidr"] = str(network.cidr)
+            if network.routable is not None:
+                data["routable"] = network.routable
+            elif "routable" in data:
+                del data["routable"]
+
+            if network.reserve_gateway is not None:
+                data["reserve_gateway"] = network.reserve_gateway
+            elif "reserve_gateway" in data:
+                del data["reserve_gateway"]
+
+            if network.reserve_internal is not None:
+                data["reserve_internal"] = network.reserve_internal
+            elif "reserve_internal" in data:
+                del data["reserve_internal"]
+
+            if network.reserve_internal_until is not None:
+                data["reserve_internal_until"] = network.reserve_internal_until
+            elif "reserve_internal_until" in data:
+                del data["reserve_internal_until"]
+
+            if network.context and network.context != "default":
                 data["context"] = network.context
+            elif "context" in data:
+                del data["context"]
 
             inherited_vlan = None
             inherited_bd = None
             inherited_env = None
             inherited_dc = None
             inherited_zone = None
-            inherited_metadata = {"timeservers": None, "dns_nameservers": None, "dns_search": None, "default_mtu": None}
+            inherited_metadata = {
+                "timeservers": None,
+                "dns_nameservers": None,
+                "dns_search": None,
+                "default_mtu": None,
+            }
 
-            if True:
-                # Load relational databases for this DB directory
-                datacenters = load_yaml_files_from_subdir(db_dir, "datacenters")
-                zones = load_yaml_files_from_subdir(db_dir, "zones")
-                environments = load_yaml_files_from_subdir(db_dir, "environments")
-                bridge_domains = load_yaml_files_from_subdir(db_dir, "bridge_domains")
-                epgs = load_yaml_files_from_subdir(db_dir, "epgs")
+            # Load relational databases for this DB directory
+            datacenters = load_yaml_files_from_subdir(db_dir, "datacenters")
+            zones = load_yaml_files_from_subdir(db_dir, "zones")
+            environments = load_yaml_files_from_subdir(db_dir, "environments")
+            bridge_domains = load_yaml_files_from_subdir(db_dir, "bridge_domains")
+            epgs = load_yaml_files_from_subdir(db_dir, "epgs")
 
+            if network.epg and network.epg in epgs:
+                epg_data = epgs[network.epg]
+                inherited_vlan = epg_data.get("vlan")
+                inherited_bd = epg_data.get("bridge_domain")
+                inherited_env = epg_data.get("environment")
+
+                if inherited_bd and inherited_bd in bridge_domains:
+                    bd_data = bridge_domains[inherited_bd]
+                    inherited_dc = bd_data.get("datacenter")
+                    inherited_zone = bd_data.get("zone")
+
+            # Now resolve inherited metadata fields to see if we have overridden them
+            for field_name in inherited_metadata:
+                val = None
                 if network.epg and network.epg in epgs:
-                    epg_data = epgs[network.epg]
-                    inherited_vlan = epg_data.get("vlan")
-                    inherited_bd = epg_data.get("bridge_domain")
-                    inherited_env = epg_data.get("environment")
+                    val = epgs[network.epg].get(field_name)
+                if val is None and inherited_env and inherited_env in environments:
+                    val = environments[inherited_env].get(field_name)
+                if val is None and inherited_bd and inherited_bd in bridge_domains:
+                    val = bridge_domains[inherited_bd].get(field_name)
+                if val is None and inherited_zone and inherited_zone in zones:
+                    val = zones[inherited_zone].get(field_name)
+                if val is None and inherited_dc and inherited_dc in datacenters:
+                    val = datacenters[inherited_dc].get(field_name)
+                inherited_metadata[field_name] = val
 
-                    if inherited_bd and inherited_bd in bridge_domains:
-                        bd_data = bridge_domains[inherited_bd]
-                        inherited_dc = bd_data.get("datacenter")
-                        inherited_zone = bd_data.get("zone")
+            if network.epg:
+                data["epg"] = network.epg
+            elif "epg" in data:
+                del data["epg"]
 
-                # Now resolve inherited metadata fields to see if we have overridden them
-                for field_name in inherited_metadata:
-                    val = None
-                    if network.epg and network.epg in epgs:
-                        val = epgs[network.epg].get(field_name)
-                    if val is None and inherited_env and inherited_env in environments:
-                        val = environments[inherited_env].get(field_name)
-                    if val is None and inherited_bd and inherited_bd in bridge_domains:
-                        val = bridge_domains[inherited_bd].get(field_name)
-                    if val is None and inherited_zone and inherited_zone in zones:
-                        val = zones[inherited_zone].get(field_name)
-                    if val is None and inherited_dc and inherited_dc in datacenters:
-                        val = datacenters[inherited_dc].get(field_name)
-                    inherited_metadata[field_name] = val
+            if network.vlan is not None and (network.epg is None or network.vlan != inherited_vlan):
+                data["vlan"] = network.vlan
+            elif "vlan" in data:
+                del data["vlan"]
 
-            if True:
-                if network.epg:
-                    data["epg"] = network.epg
-                if network.vlan is not None and (network.epg is None or network.vlan != inherited_vlan):
-                    data["vlan"] = network.vlan
-                if network.bridge_domain and (network.epg is None or network.bridge_domain != inherited_bd):
-                    data["bridge_domain"] = network.bridge_domain
-                if network.environment and (network.epg is None or network.environment != inherited_env):
-                    data["environment"] = network.environment
-                if network.datacenter and (network.epg is None or network.datacenter != inherited_dc):
-                    data["datacenter"] = network.datacenter
-                if network.zone and (network.epg is None or network.zone != inherited_zone):
-                    data["zone"] = network.zone
+            if network.bridge_domain and (network.epg is None or network.bridge_domain != inherited_bd):
+                data["bridge_domain"] = network.bridge_domain
+            elif "bridge_domain" in data:
+                del data["bridge_domain"]
 
-                # For metadata: write only if different from inherited (and not None)
-                for field_name in ["timeservers", "dns_nameservers", "dns_search", "default_mtu"]:
-                    val = getattr(network, field_name, None)
-                    if val is not None and val != inherited_metadata[field_name]:
-                        data[field_name] = val
+            if network.environment and (network.epg is None or network.environment != inherited_env):
+                data["environment"] = network.environment
+            elif "environment" in data:
+                del data["environment"]
+
+            if network.datacenter and (network.epg is None or network.datacenter != inherited_dc):
+                data["datacenter"] = network.datacenter
+            elif "datacenter" in data:
+                del data["datacenter"]
+
+            if network.zone and (network.epg is None or network.zone != inherited_zone):
+                data["zone"] = network.zone
+            elif "zone" in data:
+                del data["zone"]
+
+            # For metadata: write only if different from inherited (and not None)
+            for field_name in ["timeservers", "dns_nameservers", "dns_search", "default_mtu"]:
+                val = getattr(network, field_name, None)
+                if val is not None and val != inherited_metadata[field_name]:
+                    data[field_name] = val
+                elif field_name in data:
+                    del data[field_name]
 
             if network.static_routes:
                 data["static_routes"] = [{"cidr": sr.cidr, "gateway": sr.gateway} for sr in network.static_routes]
+            elif "static_routes" in data:
+                del data["static_routes"]
+
             if network.description:
                 data["description"] = network.description
+            elif "description" in data:
+                del data["description"]
 
             if network.reservations:
-                data["reservations"] = []
+                existing_res_maps = {}
+                if "reservations" in data and isinstance(data["reservations"], (CommentedSeq, list)):
+                    for item in data["reservations"]:
+                        if isinstance(item, (CommentedMap, dict)) and "id" in item:
+                            existing_res_maps[str(item["id"])] = item
+
+                res_list = CommentedSeq()
                 for res in network.reservations:
-                    res_data = {
-                        "id": res.id,
-                        "cidr": res.cidr,
-                        "comment": res.comment,
-                    }
+                    res_id_str = str(res.id)
+                    if res_id_str in existing_res_maps:
+                        res_data = existing_res_maps[res_id_str]
+                    else:
+                        res_data = CommentedMap()
+
+                    res_data["id"] = res.id
+                    res_data["cidr"] = res.cidr
+                    if res.comment:
+                        res_data["comment"] = res.comment
+                    elif "comment" in res_data:
+                        del res_data["comment"]
+
                     if res.allocatable:
                         res_data["allocatable"] = True
-                    data["reservations"].append(res_data)
+                    elif "allocatable" in res_data:
+                        del res_data["allocatable"]
+
+                    res_list.append(res_data)
+                data["reservations"] = res_list
+            elif "reservations" in data:
+                del data["reservations"]
 
             if network.allocations:
-                data["allocations"] = []
+                existing_alloc_maps = {}
+                if "allocations" in data and isinstance(data["allocations"], (CommentedSeq, list)):
+                    for item in data["allocations"]:
+                        if isinstance(item, (CommentedMap, dict)):
+                            k = item.get("ip") or item.get("cidr")
+                            if k:
+                                existing_alloc_maps[str(k)] = item
 
                 def sort_key(a):
                     if a.ip:
@@ -406,33 +571,47 @@ def save_network_to_file(network: Network):
                     return ipaddress.ip_address("0.0.0.0")
 
                 sorted_allocs = sorted(network.allocations, key=sort_key)
-
+                alloc_list = CommentedSeq()
                 for alloc in sorted_allocs:
-                    alloc_data = {}
+                    alloc_key = str(alloc.ip) if alloc.ip else str(alloc.cidr)
+                    if alloc_key in existing_alloc_maps:
+                        alloc_data = existing_alloc_maps[alloc_key]
+                    else:
+                        alloc_data = CommentedMap()
+
                     if alloc.ip:
                         alloc_data["ip"] = str(alloc.ip)
-                        if alloc.hostname:
-                            alloc_data["hostname"] = alloc.hostname
-                        if alloc.comment:
-                            alloc_data["comment"] = alloc.comment
+                        if "cidr" in alloc_data:
+                            del alloc_data["cidr"]
                     elif alloc.cidr:
                         alloc_data["cidr"] = alloc.cidr
-                        if alloc.hostname:
-                            alloc_data["hostname"] = alloc.hostname
-                        if alloc.comment:
-                            alloc_data["comment"] = alloc.comment
-                    data["allocations"].append(alloc_data)
+                        if "ip" in alloc_data:
+                            del alloc_data["ip"]
 
-            # Now write the data back, truncating the file
+                    if alloc.hostname:
+                        alloc_data["hostname"] = alloc.hostname
+                    elif "hostname" in alloc_data:
+                        del alloc_data["hostname"]
+
+                    if alloc.comment:
+                        alloc_data["comment"] = alloc.comment
+                    elif "comment" in alloc_data:
+                        del alloc_data["comment"]
+
+                    alloc_list.append(alloc_data)
+                data["allocations"] = alloc_list
+            elif "allocations" in data:
+                del data["allocations"]
+
+            formatted_data = format_yaml_node(data)
+
+            buf = io.StringIO()
+            yaml_rt.dump(formatted_data, buf)
+            content_after = buf.getvalue()
+
             lock_file.seek(0)
             lock_file.truncate()
-
-            # Write comments first
-            for comment in comments:
-                lock_file.write(comment)
-
-            # Dump YAML
-            yaml.dump(data, lock_file, sort_keys=False)
+            lock_file.write(content_after)
 
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

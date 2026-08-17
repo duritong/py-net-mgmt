@@ -1005,101 +1005,11 @@ def edit(entity_type, name, path):
 
 def run_format(path):
     """Format and order all keys, reservations, and allocations in database files."""
-    import builtins
     import io
 
-    from ruamel.yaml import YAML
-    from ruamel.yaml.comments import CommentedMap, CommentedSeq
+    from .loader import format_yaml_node, get_yaml_handler
 
-    yaml_rt = YAML(typ="rt")
-    yaml_rt.preserve_quotes = True
-    yaml_rt.indent(mapping=2, sequence=4, offset=2)
-    yaml_rt.width = 120
-
-    # Helper to sort sequence of mapping items by IP (supporting both direct 'ip' or 'cidr' keys)
-    def get_item_start_ip(item):
-        val = item.get("cidr") or item.get("ip")
-        if not val:
-            comment_val = item.get("comment", "")
-            return (ipaddress.ip_address("255.255.255.255"), comment_val)
-        val_str = str(val).split("-")[0].strip()
-        try:
-            return (ipaddress.ip_address(val_str), "")
-        except ValueError:
-            try:
-                return (ipaddress.ip_network(val_str, strict=False).network_address, "")
-            except ValueError:
-                return (ipaddress.ip_address("255.255.255.255"), val_str)
-
-    # Recursive function to format mapping structures
-    def format_node(node):
-        if isinstance(node, CommentedMap):
-            cmap_keys = builtins.list(node.keys())
-            sorted_keys = []
-
-            # 1. Primary order fields
-            primary_order = [
-                "cidr",
-                "description",
-                "epg",
-                "environment",
-                "datacenter",
-                "zone",
-                "bridge_domain",
-            ]
-            for field in primary_order:
-                if field in cmap_keys:
-                    sorted_keys.append(field)
-
-            # 2. Last keys
-            last_keys = []
-            for last_key in ["reservations", "allocations"]:
-                if last_key in cmap_keys:
-                    last_keys.append(last_key)
-
-            # 3. Alphabetical other keys
-            other = []
-            for k in cmap_keys:
-                if k not in sorted_keys and k not in last_keys:
-                    other.append(k)
-            other.sort()
-
-            all_sorted_keys = sorted_keys + other + last_keys
-
-            # Format nested structures inside
-            for k in all_sorted_keys:
-                node[k] = format_node(node[k])
-
-            # Rebuild CommentedMap with sorted keys and preserved comments
-            new_map = CommentedMap()
-            if hasattr(node, "ca") and node.ca:
-                new_map.ca.comment = node.ca.comment
-            for k in all_sorted_keys:
-                new_map[k] = node[k]
-                if hasattr(node, "ca") and k in node.ca.items:
-                    new_map.ca.items[k] = node.ca.items[k]
-            return new_map
-
-        elif isinstance(node, CommentedSeq) or isinstance(node, builtins.list):
-            # If this is reservations list or allocations list, we sort the elements symmetrically!
-            if len(node) > 0 and isinstance(node[0], CommentedMap):
-                is_reservations = "cidr" in node[0] and "id" in node[0]
-                is_allocations = "ip" in node[0] or "cidr" in node[0]
-                if is_reservations or is_allocations:
-                    node = sorted(node, key=get_item_start_ip)
-
-            # Recursively format sequence elements
-            new_seq = CommentedSeq()
-            if hasattr(node, "ca") and node.ca:
-                new_seq.ca.comment = node.ca.comment
-            for i, item in enumerate(node):
-                formatted_item = format_node(item)
-                new_seq.append(formatted_item)
-                if hasattr(node, "ca") and i in node.ca.items:
-                    new_seq.ca.items[i] = node.ca.items[i]
-            return new_seq
-
-        return node
+    yaml_rt = get_yaml_handler()
 
     # Walk directory and load files
     files_to_format = []
@@ -1126,7 +1036,7 @@ def run_format(path):
                 continue
 
             # Format
-            formatted_data = format_node(data)
+            formatted_data = format_yaml_node(data)
 
             # Dump to buffer to check changes
             buf = io.StringIO()

@@ -626,8 +626,9 @@ class Network:
         for res in target_reservations:
             for ip in res.iter_ips():
                 if ip not in allocated_ips:
-                    free_ips_set.add(ip)
-
+                    is_reserved = any(not r.allocatable and r.contains_ip(ip) for r in eff_reservations)
+                    if not is_reserved:
+                        free_ips_set.add(ip)
         if len(free_ips_set) < needed:
             raise ValueError(
                 f"Not enough free IPs. Requested {count}, missing {needed}, "
