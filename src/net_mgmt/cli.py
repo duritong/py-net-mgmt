@@ -524,9 +524,12 @@ def show(level, name, format, path):
         table.add_column("Usage", justify="right")
 
         # Sort reservations by their starting IP address
-        sorted_reservations = sorted(network.effective_reservations, key=lambda r: r.networks[0].network_address)
+        sorted_reservations = sorted(
+            network.effective_reservations,
+            key=lambda r: (r.networks[0].network_address, str(r.cidr), str(r.id)),
+        )
         for res in sorted_reservations:
-            usage = network.get_reservation_usage(res.id)
+            usage = network.get_reservation_usage(res.id, res.cidr)
             alloc_count = str(usage["count"])
             usage_pct = f"{usage['percent']:.1f}%"
             table.add_row(

@@ -35,7 +35,7 @@
 | ID | CIDR | Comment | Allocatable | Allocations | Usage |
 | --- | --- | --- | --- | --- | --- |
 {% for res in network.effective_reservations -%}
-{% set usage = network.get_reservation_usage(res.id) -%}
+{% set usage = network.get_reservation_usage(res.id, res.cidr) -%}
 | {{ res.id }} | {{ res.cidr }} | {{ res.comment }} | {{ res.allocatable }} | {{ usage.count }} | {{ usage.count }}/{{ usage.total }} ({{ "%.1f" | format(usage.percent) }}%) |
 {% endfor -%}
 {% else -%}

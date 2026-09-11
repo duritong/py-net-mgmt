@@ -297,16 +297,18 @@ def get_yaml_handler() -> YAML:
 def get_item_start_ip(item):
     val = item.get("cidr") or item.get("ip")
     if not val:
-        comment_val = item.get("comment", "")
-        return (ipaddress.ip_address("255.255.255.255"), comment_val)
+        comment_val = str(item.get("comment", ""))
+        return (ipaddress.ip_address("255.255.255.255"), comment_val, str(item.get("id", "")))
     val_str = str(val).split("-")[0].strip()
+    full_val = str(val)
+    item_id = str(item.get("id", ""))
     try:
-        return (ipaddress.ip_address(val_str), "")
+        return (ipaddress.ip_address(val_str), full_val, item_id)
     except ValueError:
         try:
-            return (ipaddress.ip_network(val_str, strict=False).network_address, "")
+            return (ipaddress.ip_network(val_str, strict=False).network_address, full_val, item_id)
         except ValueError:
-            return (ipaddress.ip_address("255.255.255.255"), val_str)
+            return (ipaddress.ip_address("255.255.255.255"), full_val, item_id)
 
 
 def format_yaml_node(node):
@@ -520,18 +522,40 @@ def save_network_to_file(network: Network):
                 del data["description"]
 
             if network.reservations:
-                existing_res_maps = {}
+                existing_res_items = []
                 if "reservations" in data and isinstance(data["reservations"], (CommentedSeq, list)):
                     for item in data["reservations"]:
-                        if isinstance(item, (CommentedMap, dict)) and "id" in item:
-                            existing_res_maps[str(item["id"])] = item
+                        if isinstance(item, (CommentedMap, dict)):
+                            existing_res_items.append(item)
 
                 res_list = CommentedSeq()
+                used_res_indices = set()
+
                 for res in network.reservations:
                     res_id_str = str(res.id)
-                    if res_id_str in existing_res_maps:
-                        res_data = existing_res_maps[res_id_str]
-                    else:
+                    res_cidr_str = str(res.cidr).strip()
+                    res_data = None
+
+                    # First pass: try exact match on both id and cidr
+                    for i, item in enumerate(existing_res_items):
+                        if i not in used_res_indices and "id" in item and str(item["id"]) == res_id_str:
+                            if "cidr" in item and str(item["cidr"]).strip() == res_cidr_str:
+                                res_data = item
+                                used_res_indices.add(i)
+                                break
+
+                    # Second pass: if not found, match by id if unambiguous
+                    if res_data is None:
+                        matching_by_id = [
+                            i
+                            for i, item in enumerate(existing_res_items)
+                            if i not in used_res_indices and "id" in item and str(item["id"]) == res_id_str
+                        ]
+                        if len(matching_by_id) == 1:
+                            res_data = existing_res_items[matching_by_id[0]]
+                            used_res_indices.add(matching_by_id[0])
+
+                    if res_data is None:
                         res_data = CommentedMap()
 
                     res_data["id"] = res.id
@@ -552,13 +576,11 @@ def save_network_to_file(network: Network):
                 del data["reservations"]
 
             if network.allocations:
-                existing_alloc_maps = {}
+                existing_alloc_items = []
                 if "allocations" in data and isinstance(data["allocations"], (CommentedSeq, list)):
                     for item in data["allocations"]:
                         if isinstance(item, (CommentedMap, dict)):
-                            k = item.get("ip") or item.get("cidr")
-                            if k:
-                                existing_alloc_maps[str(k)] = item
+                            existing_alloc_items.append(item)
 
                 def sort_key(a):
                     if a.ip:
@@ -572,11 +594,19 @@ def save_network_to_file(network: Network):
 
                 sorted_allocs = sorted(network.allocations, key=sort_key)
                 alloc_list = CommentedSeq()
+                used_alloc_indices = set()
                 for alloc in sorted_allocs:
                     alloc_key = str(alloc.ip) if alloc.ip else str(alloc.cidr)
-                    if alloc_key in existing_alloc_maps:
-                        alloc_data = existing_alloc_maps[alloc_key]
-                    else:
+                    alloc_data = None
+                    for i, item in enumerate(existing_alloc_items):
+                        if i not in used_alloc_indices:
+                            k = str(item.get("ip") or item.get("cidr", "")).strip()
+                            if k == alloc_key.strip():
+                                alloc_data = item
+                                used_alloc_indices.add(i)
+                                break
+
+                    if alloc_data is None:
                         alloc_data = CommentedMap()
 
                     if alloc.ip:

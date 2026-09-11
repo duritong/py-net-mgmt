@@ -196,6 +196,93 @@ class TestFindOrAllocate(unittest.TestCase):
         finally:
             shutil.rmtree(test_dir)
 
+    def test_allocate_with_duplicate_reservation_id_first_non_allocatable(self):
+        # Network with 2 reservations sharing the same ID 'pool'
+        # First reservation is NOT allocatable, second reservation IS allocatable
+        net = Network(name="test_alloc", cidr="10.0.0.0/24")
+        net.add_reservation(id="pool", cidr="10.0.0.10-10.0.0.20", comment="Non-allocatable part", allocatable=False)
+        net.add_reservation(id="pool", cidr="10.0.0.30-10.0.0.40", comment="Allocatable part", allocatable=True)
+
+        # 1. get_next_free_ip with reservation_id="pool" should allocate from the second reservation (10.0.0.30)
+        next_ip = net.get_next_free_ip("pool")
+        self.assertEqual(str(next_ip), "10.0.0.30")
+
+        # 2. find_or_allocate_hostname with reservation_id="pool" should succeed and take from the second reservation
+        alloc = net.find_or_allocate_hostname("host1.internal", reservation_id="pool")
+        self.assertEqual(str(alloc.ip), "10.0.0.30")
+        self.assertEqual(alloc.hostname, "host1.internal")
+
+        # 3. Next allocation should take the next free IP in the second reservation (10.0.0.31)
+        alloc2 = net.find_or_allocate_hostname("host2.internal", reservation_id="pool")
+        self.assertEqual(str(alloc2.ip), "10.0.0.31")
+
+        # 4. find_or_allocate_range with reservation_id="pool" should also take from the second reservation
+        range_allocs = net.find_or_allocate_range("cluster", 2, reservation_id="pool")
+        self.assertEqual(len(range_allocs), 1)
+        self.assertEqual(range_allocs[0].cidr, "10.0.0.32-10.0.0.33")
+
+        # 5. Network validation should pass
+        net.validate()
+
+    def test_allocate_from_file_with_same_id_first_non_allocatable(self):
+        import shutil
+        import tempfile
+
+        from click.testing import CliRunner
+
+        from src.net_mgmt.cli import cli
+        from src.net_mgmt.loader import load_network_from_file
+
+        test_dir = tempfile.mkdtemp()
+        try:
+            networks_dir = os.path.join(test_dir, "networks")
+            os.makedirs(networks_dir)
+            net_file = os.path.join(networks_dir, "split_net.yaml")
+            with open(net_file, "w", encoding="utf-8") as f:
+                f.write(
+                    "cidr: 10.0.0.0/24\n"
+                    "reservations:\n"
+                    "  - id: service_pool\n"
+                    "    cidr: 10.0.0.10-10.0.0.20\n"
+                    "    comment: Reserved static block\n"
+                    "    allocatable: false\n"
+                    "  - id: service_pool\n"
+                    "    cidr: 10.0.0.30-10.0.0.40\n"
+                    "    comment: Dynamic allocatable block\n"
+                    "    allocatable: true\n"
+                )
+
+            # Use CLI to find_or_allocate_hostname with --reservation-id
+            runner = CliRunner()
+            result = runner.invoke(
+                cli,
+                [
+                    "find-or-allocate-hostname",
+                    "split_net",
+                    "srv01.example.com",
+                    "--reservation-id",
+                    "service_pool",
+                    "--path",
+                    networks_dir,
+                ],
+            )
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("10.0.0.30", result.output)
+
+            # Validate database
+            val_res = runner.invoke(cli, ["validate", "--path", networks_dir, "--format"])
+            self.assertEqual(val_res.exit_code, 0)
+
+            # Reload and check
+            net = load_network_from_file(net_file)
+            self.assertEqual(len(net.allocations), 1)
+            self.assertEqual(str(net.allocations[0].ip), "10.0.0.30")
+            self.assertEqual(len(net.reservations), 2)
+            self.assertEqual(net.reservations[0].allocatable, False)
+            self.assertEqual(net.reservations[1].allocatable, True)
+        finally:
+            shutil.rmtree(test_dir)
+
 
 if __name__ == "__main__":
     unittest.main()

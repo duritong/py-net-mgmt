@@ -387,26 +387,33 @@ class Network:
 
         return formatted
 
-    def get_reservation_usage(self, reservation_id: str):
+    def get_reservation_usage(self, reservation_id: str, cidr: Optional[str] = None):
         """Get usage statistics for a reservation."""
-        res = next((r for r in self.effective_reservations if r.id == reservation_id), None)
-        if not res:
+        if cidr is not None:
+            matching_res = [
+                r
+                for r in self.effective_reservations
+                if r.id == reservation_id and str(r.cidr).strip() == str(cidr).strip()
+            ]
+        else:
+            matching_res = [r for r in self.effective_reservations if r.id == reservation_id]
+
+        if not matching_res:
             return None
 
-        # Let's count Allocation objects for 'count', and addresses for 'percent'
         alloc_obj_count = 0
         used_addresses = 0
+        total = sum(r.num_addresses for r in matching_res)
 
         for alloc in self.allocations:
             is_in_res = False
             for alloc_net in alloc.networks:
-                if res.contains_network(alloc_net):
+                if any(r.contains_network(alloc_net) for r in matching_res):
                     is_in_res = True
                     used_addresses += alloc_net.num_addresses
             if is_in_res:
                 alloc_obj_count += 1
 
-        total = res.num_addresses
         percent = (used_addresses / total * 100) if total > 0 else 0
 
         return {"count": alloc_obj_count, "total": total, "percent": percent}
@@ -528,16 +535,15 @@ class Network:
         self.save()
 
     def get_next_free_ip(self, reservation_id: Optional[str] = None) -> ipaddress.IPv4Address:
-        target_reservations = []
         eff_reservations = self.effective_reservations
 
         if reservation_id:
-            res = next((r for r in eff_reservations if r.id == reservation_id), None)
-            if not res:
+            matching = [r for r in eff_reservations if r.id == reservation_id]
+            if not matching:
                 raise ValueError(f"Reservation '{reservation_id}' not found")
-            if not res.allocatable:
+            target_reservations = [r for r in matching if r.allocatable]
+            if not target_reservations:
                 raise ValueError(f"Reservation '{reservation_id}' is not allocatable")
-            target_reservations = [res]
         else:
             # Filter allocatable reservations
             target_reservations = [r for r in eff_reservations if r.allocatable]
@@ -609,10 +615,12 @@ class Network:
 
         eff_reservations = self.effective_reservations
         if reservation_id:
-            res = next((r for r in eff_reservations if r.id == reservation_id), None)
-            if not res or not res.allocatable:
+            matching = [r for r in eff_reservations if r.id == reservation_id]
+            if not matching:
                 raise ValueError(f"Reservation '{reservation_id}' not found or not allocatable")
-            target_reservations = [res]
+            target_reservations = [r for r in matching if r.allocatable]
+            if not target_reservations:
+                raise ValueError(f"Reservation '{reservation_id}' not found or not allocatable")
         else:
             target_reservations = [r for r in eff_reservations if r.allocatable]
 

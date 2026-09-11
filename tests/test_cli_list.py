@@ -390,6 +390,70 @@ description: "Net 2"
         self.assertTrue(cidr_idx < desc_idx)
         self.assertTrue(desc_idx < dc_idx)
 
+    def test_format_and_validate_preserves_reservations_with_same_id_different_subranges(self):
+        networks_dir = os.path.join(self.test_dir, "networks_same_id")
+        os.makedirs(networks_dir)
+        net_file = os.path.join(networks_dir, "multi_res.yaml")
+
+        # Network with 2 reservations sharing the same id ('dhcp_pool') from different subranges
+        initial_yaml = """description: Multi Reservation Network
+cidr: 10.0.0.0/24
+reservations:
+  - id: dhcp_pool # Subrange A comment
+    cidr: 10.0.0.10-10.0.0.20
+    comment: pool part 1
+    allocatable: true
+  - id: dhcp_pool # Subrange B comment
+    cidr: 10.0.0.30-10.0.0.40
+    comment: pool part 2
+    allocatable: true
+"""
+        with open(net_file, "w", encoding="utf-8") as f:
+            f.write(initial_yaml)
+
+        # 1. Validate database - should succeed
+        res_val = self.runner.invoke(cli, ["validate", "--path", networks_dir])
+        self.assertEqual(res_val.exit_code, 0)
+        self.assertIn("Successfully validated 1 networks.", res_val.output)
+
+        # 2. Format database via 'validate --format'
+        res_val_fmt = self.runner.invoke(cli, ["validate", "--path", networks_dir, "--format"])
+        self.assertEqual(res_val_fmt.exit_code, 0)
+
+        # 3. Verify the 2 reservations are preserved after formatting
+        with open(net_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("10.0.0.10-10.0.0.20", content)
+        self.assertIn("10.0.0.30-10.0.0.40", content)
+        self.assertIn("# Subrange A comment", content)
+        self.assertIn("# Subrange B comment", content)
+        self.assertEqual(content.count("id: dhcp_pool"), 2)
+
+        # 4. Add an allocation using CLI and verify standard save formatting preserves both reservations
+        res_add = self.runner.invoke(
+            cli,
+            ["add-allocation", "multi_res", "--ip", "10.0.0.15", "--hostname", "host1", "--path", networks_dir],
+        )
+        self.assertEqual(res_add.exit_code, 0)
+
+        with open(net_file, "r", encoding="utf-8") as f:
+            content_after_add = f.read()
+
+        self.assertIn("10.0.0.10-10.0.0.20", content_after_add)
+        self.assertIn("10.0.0.30-10.0.0.40", content_after_add)
+        self.assertIn("# Subrange A comment", content_after_add)
+        self.assertIn("# Subrange B comment", content_after_add)
+        self.assertEqual(content_after_add.count("id: dhcp_pool"), 2)
+
+        # 5. Verify validation and formatting pass cleanly
+        res_fmt = self.runner.invoke(cli, ["format", "--path", networks_dir])
+        self.assertEqual(res_fmt.exit_code, 0)
+
+        res_val_final = self.runner.invoke(cli, ["validate", "--path", networks_dir])
+        self.assertEqual(res_val_final.exit_code, 0)
+        self.assertIn("Successfully validated 1 networks.", res_val_final.output)
+
 
 class TestCliListLevels(unittest.TestCase):
     def setUp(self):
