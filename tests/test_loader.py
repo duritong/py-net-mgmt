@@ -105,6 +105,27 @@ reservations:
             if os.path.exists(same_id_file):
                 os.remove(same_id_file)
 
+    def test_load_aggregate_network(self):
+        agg_file = os.path.join("networks_test", "networks", "agg_net.yaml")
+        try:
+            with open(agg_file, "w") as f:
+                yaml.dump(
+                    {
+                        "cidr": "10.10.0.0/22",
+                        "aggregate": True,
+                        "description": "Aggregate Block",
+                    },
+                    f,
+                )
+            net = load_network_from_file(agg_file)
+            self.assertTrue(net.aggregate)
+            self.assertFalse(net.reserve_gateway)
+            self.assertFalse(net.reserve_internal)
+            self.assertIsNone(net.gateway)
+        finally:
+            if os.path.exists(agg_file):
+                os.remove(agg_file)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,3 @@
+cidr: 10.10.0.0/24
+epg: EPG_Web
+description: Corporate Web Tier

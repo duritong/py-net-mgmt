@@ -10,3 +10,4 @@
 | Network Name | CIDR | Context | Description |
 | --- | --- | --- | --- |
 | [backend_net](../networks/backend_net.md) | `10.0.2.0/24` | `default` | Application Backend |
+| [corp-app](../networks/corp-app.md) | `10.10.1.0/24` | `default` | Corporate Application Tier |

@@ -49,6 +49,7 @@ def load_network_from_file(file_path: str) -> Network:
                 )
             )
 
+    aggregate = bool(data.get("aggregate", False))
     network = Network(
         name=os.path.basename(file_path).replace(".yaml", "").replace(".yml", ""),
         cidr=data.get("cidr", "0.0.0.0/0"),
@@ -65,12 +66,13 @@ def load_network_from_file(file_path: str) -> Network:
         datacenter=data.get("datacenter"),
         routable=data.get("routable", True),
         context=data.get("context", "default"),
+        aggregate=aggregate,
         description=data.get("description"),
         file_path=file_path,
         reservations=reservations,
         allocations=allocations,
-        reserve_gateway=data.get("reserve_gateway", True),
-        reserve_internal=data.get("reserve_internal", True),
+        reserve_gateway=data.get("reserve_gateway", False if aggregate else True),
+        reserve_internal=data.get("reserve_internal", False if aggregate else True),
         reserve_internal_until=data.get("reserve_internal_until", 6),
     )
     network.validate()
@@ -213,6 +215,16 @@ def load_all_networks(directory: str) -> List[Network]:
                     f"ForeignKey Integrity: Zone '{net.zone}' referenced by network '{net.name}' does not exist."
                 )
 
+        # Aggregate inheritance for child subnets
+        parent_aggregate = net.get_parent_aggregate(networks)
+        if parent_aggregate:
+            if net.datacenter is None and parent_aggregate.datacenter:
+                net.datacenter = parent_aggregate.datacenter
+            if net.zone is None and parent_aggregate.zone:
+                net.zone = parent_aggregate.zone
+            if net.environment is None and parent_aggregate.environment:
+                net.environment = parent_aggregate.environment
+
         # 7. Metadata Resolution Cascade (Attribute Resolution Cascade)
         for field_name in ["timeservers", "dns_nameservers", "dns_search", "default_mtu"]:
             val = getattr(net, field_name, None)
@@ -245,6 +257,12 @@ def load_all_networks(directory: str) -> List[Network]:
 
             if net.datacenter and net.datacenter in datacenters:
                 val = datacenters[net.datacenter].get(field_name)
+                if val is not None:
+                    setattr(net, field_name, val)
+                    continue
+
+            if parent_aggregate:
+                val = getattr(parent_aggregate, field_name, None)
                 if val is not None:
                     setattr(net, field_name, val)
                     continue
@@ -319,6 +337,7 @@ def format_yaml_node(node):
         primary_order = [
             "id",
             "cidr",
+            "aggregate",
             "ip",
             "hostname",
             "description",
@@ -403,6 +422,11 @@ def save_network_to_file(network: Network):
                 data = CommentedMap()
 
             data["cidr"] = str(network.cidr)
+            if network.aggregate:
+                data["aggregate"] = True
+            elif "aggregate" in data:
+                del data["aggregate"]
+
             if network.routable is not None:
                 data["routable"] = network.routable
             elif "routable" in data:

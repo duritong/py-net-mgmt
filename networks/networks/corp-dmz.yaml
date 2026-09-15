@@ -1,0 +1,3 @@
+cidr: 10.10.3.0/24
+epg: EPG_FrontEnd
+description: Corporate DMZ Services

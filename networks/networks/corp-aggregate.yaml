@@ -1,0 +1,6 @@
+cidr: 10.10.0.0/22
+aggregate: true
+routable: true
+datacenter: DC_Frankfurt
+zone: Trusted
+description: Corporate Service Aggregate Network (/22 block)

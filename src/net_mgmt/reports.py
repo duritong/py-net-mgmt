@@ -119,8 +119,9 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
             f.write(content)
 
     # Render Networks
+    aggregate_networks = [n for n in sorted_networks if n.aggregate]
     for net in sorted_networks:
-        content = env.get_template("network.md").render(network=net)
+        content = env.get_template("network.md").render(network=net, all_networks=sorted_networks)
         with open(os.path.join(output_dir, "networks", f"{net.name}.md"), "w", encoding="utf-8") as f:
             f.write(content)
 
@@ -129,6 +130,8 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
     unassigned_networks = []
 
     for net in sorted_networks:
+        if net.aggregate:
+            continue
         if not (net.datacenter or net.zone or net.bridge_domain or net.environment or net.epg):
             unassigned_networks.append(net)
         else:
@@ -142,7 +145,12 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
                 epg, []
             ).append(net)
 
-    content = env.get_template("index.md").render(tree=tree, unassigned_networks=unassigned_networks)
+    content = env.get_template("index.md").render(
+        tree=tree,
+        unassigned_networks=unassigned_networks,
+        aggregate_networks=aggregate_networks,
+        all_networks=sorted_networks,
+    )
     with open(os.path.join(output_dir, "README.md"), "w", encoding="utf-8") as f:
         f.write(content)
 

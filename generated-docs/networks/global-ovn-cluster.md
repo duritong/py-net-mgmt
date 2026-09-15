@@ -2,6 +2,9 @@
 
 ## Settings
 - **CIDR**: `10.3.128.0/18`
+
+
+
 - **Context**: `default`
 - **Description**: OVN Cluster internal network
 - **VLAN**: `None`
@@ -23,6 +26,7 @@
 - **Routable**: `False`
 - **Reserve Gateway**: `False`
 - **Reserve Internal**: `False`
+- **Reserve Internal Until**: `6`
 
 ## Reservations
 | ID | CIDR | Comment | Allocatable | Allocations | Usage |

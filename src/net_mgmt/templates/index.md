@@ -31,3 +31,15 @@
 | [{{ net.name }}](networks/{{ net.name }}.md) | `{{ net.cidr }}` | `{{ net.context or 'default' }}` | `{{ net.vlan or 'None' }}` | {{ net.description or '' }} |
 {% endfor %}
 {% endif %}
+
+{% if aggregate_networks %}
+---
+
+## 📦 Aggregate Networks
+| Aggregate Network | CIDR | Subnets | Context | Description |
+| --- | --- | --- | --- | --- |
+{% for agg in aggregate_networks -%}
+{% set child_nets = agg.get_subnets(all_networks) if all_networks else [] -%}
+| [{{ agg.name }}](networks/{{ agg.name }}.md) | `{{ agg.cidr }}` | {{ child_nets | length }} subnets | `{{ agg.context or 'default' }}` | {{ agg.description or '' }} |
+{% endfor %}
+{% endif %}

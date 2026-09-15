@@ -15,8 +15,17 @@
                 
                 - 🔌 **[backend_net](networks/backend_net.md)** (`10.0.2.0/24`) — *Application Backend*
                 
+                - 🔌 **[corp-app](networks/corp-app.md)** (`10.10.1.0/24`) — *Corporate Application Tier*
+                
+            
+              - 🏷️ **[EPG_DB](epgs/EPG_DB.md)**
+                
+                - 🔌 **[corp-db](networks/corp-db.md)** (`10.10.2.0/24`) — *Corporate Database Tier*
+                
             
               - 🏷️ **[EPG_Web](epgs/EPG_Web.md)**
+                
+                - 🔌 **[corp-web](networks/corp-web.md)** (`10.10.0.0/24`) — *Corporate Web Tier*
                 
                 - 🔌 **[example_net](networks/example_net.md)** (`10.0.0.0/24`) — *Production Web Tier*
                 
@@ -31,6 +40,8 @@
           - 🌍 **[unassigned](environments/unassigned.md)**
             
               - 🏷️ **[EPG_FrontEnd](epgs/EPG_FrontEnd.md)**
+                
+                - 🔌 **[corp-dmz](networks/corp-dmz.md)** (`10.10.3.0/24`) — *Corporate DMZ Services*
                 
                 - 🔌 **[dmz_net](networks/dmz_net.md)** (`10.0.1.0/24`) — *Public Facing DMZ*
                 
@@ -70,4 +81,14 @@
     
   
 
+
+
+
+
+---
+
+## 📦 Aggregate Networks
+| Aggregate Network | CIDR | Subnets | Context | Description |
+| --- | --- | --- | --- | --- |
+| [corp-aggregate](networks/corp-aggregate.md) | `10.10.0.0/22` | 4 subnets | `default` | Corporate Service Aggregate Network (/22 block) |
 

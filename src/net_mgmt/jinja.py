@@ -263,10 +263,12 @@ def network_containing_ip(value: Any, ip_str: Optional[str] = None) -> Optional[
     except ValueError:
         return None
 
-    for net in networks:
-        if target_ip in net.cidr:
-            return net
-    return None
+    matching = [net for net in networks if target_ip in net.cidr]
+    if not matching:
+        return None
+    # Longest prefix match: highest prefixlen first; if prefixlen is equal, prefer non-aggregate
+    matching.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+    return matching[0]
 
 
 def query_networks(value: Any, filters: Optional[dict] = None, **kwargs) -> List[Network]:

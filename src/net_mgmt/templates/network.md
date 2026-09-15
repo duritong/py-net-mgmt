@@ -2,6 +2,9 @@
 
 ## Settings
 - **CIDR**: `{{ network.cidr }}`
+{% if network.aggregate %}- **Aggregate Network**: True{% endif %}
+{% set parent = network.get_parent_aggregate(all_networks) if all_networks else None %}
+{% if parent %}- **Parent Aggregate**: [{{ parent.name }}]({{ parent.name }}.md) (`{{ parent.cidr }}`){% endif %}
 - **Context**: `{{ network.context }}`
 {% if network.description %}- **Description**: {{ network.description }}{% endif %}
 - **VLAN**: `{{ network.vlan or 'None' }}`
@@ -62,3 +65,23 @@ _No reservations._
 - `{{ rng }}`
 {% endfor -%}
 {% endif -%}
+
+{% if network.aggregate %}
+{% set subnets = network.get_subnets(all_networks) if all_networks else [] %}
+{% if subnets %}
+## Sub-Prefixes (Subnets)
+| Subnet | CIDR | EPG | VLAN | Bridge Domain | Description |
+| --- | --- | --- | --- | --- | --- |
+{% for sub in subnets -%}
+| [{{ sub.name }}]({{ sub.name }}.md) | `{{ sub.cidr }}` | {% if sub.epg %}[{{ sub.epg }}](../epgs/{{ sub.epg }}.md){% else %}`None`{% endif %} | {{ sub.vlan or 'None' }} | {% if sub.bridge_domain %}[{{ sub.bridge_domain }}](../bridge_domains/{{ sub.bridge_domain }}.md){% else %}`None`{% endif %} | {{ sub.description or '' }} |
+{% endfor -%}
+{% endif %}
+
+{% set unallocated = network.get_unallocated_subnets(all_networks) if all_networks else [] %}
+{% if unallocated %}
+## Available Sub-Prefix Capacity
+{% for block in unallocated -%}
+- `{{ block }}`
+{% endfor -%}
+{% endif %}
+{% endif %}

@@ -509,9 +509,41 @@ def show(level, name, format, path):
     console.print(f"[bold cyan]Zone:[/bold cyan] {network.zone or 'None'}")
     console.print(f"[bold cyan]Datacenter:[/bold cyan] {network.datacenter or 'None'}")
     console.print(f"[bold cyan]Routable:[/bold cyan] {network.routable}")
+    if network.aggregate:
+        console.print("[bold cyan]Aggregate Network:[/bold cyan] True")
     console.print(f"[bold cyan]Reserve Gateway:[/bold cyan] {network.reserve_gateway}")
     console.print(f"[bold cyan]Reserve Internal:[/bold cyan] {network.reserve_internal}")
     console.print(f"[bold cyan]Reserve Internal Until:[/bold cyan] {network.reserve_internal_until}")
+
+    all_nets = get_database()
+    if network.aggregate:
+        subnets = network.get_subnets(all_nets)
+        if subnets:
+            console.print("\n[bold yellow]Sub-Prefixes (Subnets):[/bold yellow]")
+            sub_table = Table(box=rich.box.SIMPLE)
+            sub_table.add_column("Subnet", style="cyan")
+            sub_table.add_column("CIDR", style="green")
+            sub_table.add_column("EPG", style="magenta")
+            sub_table.add_column("VLAN", justify="right")
+            sub_table.add_column("Description")
+            for sub in sorted(subnets, key=lambda s: s.cidr):
+                sub_table.add_row(
+                    sub.name,
+                    str(sub.cidr),
+                    sub.epg or "None",
+                    str(sub.vlan) if sub.vlan is not None else "None",
+                    sub.description or "",
+                )
+            console.print(sub_table)
+        unallocated = network.get_unallocated_subnets(all_nets)
+        if unallocated:
+            console.print("\n[bold yellow]Available Sub-Prefix Capacity:[/bold yellow]")
+            for block in unallocated:
+                console.print(f"  - [green]{block}[/green]")
+    else:
+        parent = network.get_parent_aggregate(all_nets)
+        if parent:
+            console.print(f"[bold cyan]Parent Aggregate:[/bold cyan] {parent.name} ({parent.cidr})")
 
     if network.effective_reservations:
         console.print("\n[bold yellow]Reservations:[/bold yellow]")

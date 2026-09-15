@@ -1,12 +1,12 @@
-# dmz_net
+# corp-dmz
 
 ## Settings
-- **CIDR**: `10.0.1.0/24`
+- **CIDR**: `10.10.3.0/24`
 
 
-
+- **Parent Aggregate**: [corp-aggregate](corp-aggregate.md) (`10.10.0.0/22`)
 - **Context**: `default`
-- **Description**: Public Facing DMZ
+- **Description**: Corporate DMZ Services
 - **VLAN**: `20`
 - **Bridge Domain**: [BD_DMZ](../bridge_domains/BD_DMZ.md)
 - **Environment**: `None`
@@ -31,16 +31,9 @@
 ## Reservations
 | ID | CIDR | Comment | Allocatable | Allocations | Usage |
 | --- | --- | --- | --- | --- | --- |
-| server-pool | 10.0.1.10-10.0.1.50 | Web Server Pool | True | 2 | 2/41 (4.9%) |
-| sys-network | 10.0.1.0 | network address | False | 0 | 0/1 (0.0%) |
-| sys-broadcast | 10.0.1.255 | broadcast address | False | 0 | 0/1 (0.0%) |
-| sys-gateway | 10.0.1.1 | network internal | False | 0 | 0/1 (0.0%) |
-| sys-internal | 10.0.1.2-10.0.1.6 | network internal | False | 0 | 0/5 (0.0%) |
-## Allocations
-| IP/CIDR | Hostname/Comment |
-| --- | --- |
-| 10.0.1.10 | web-dmz-01 |
-| 10.0.1.11 | web-dmz-02 |
+| sys-network | 10.10.3.0 | network address | False | 0 | 0/1 (0.0%) |
+| sys-broadcast | 10.10.3.255 | broadcast address | False | 0 | 0/1 (0.0%) |
+| sys-gateway | 10.10.3.1 | network internal | False | 0 | 0/1 (0.0%) |
+| sys-internal | 10.10.3.2-10.10.3.6 | network internal | False | 0 | 0/5 (0.0%) |
 ## Unreserved Ranges
-- `10.0.1.7 - 10.0.1.9`
-- `10.0.1.51 - 10.0.1.255`
+- `10.10.3.7 - 10.10.3.255`

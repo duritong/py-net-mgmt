@@ -2,6 +2,9 @@
 
 ## Settings
 - **CIDR**: `10.0.0.0/24`
+
+
+
 - **Context**: `default`
 - **Description**: Production Web Tier
 - **VLAN**: `10`
@@ -23,6 +26,7 @@
 - **Routable**: `True`
 - **Reserve Gateway**: `False`
 - **Reserve Internal**: `False`
+- **Reserve Internal Until**: `6`
 
 ## Reservations
 | ID | CIDR | Comment | Allocatable | Allocations | Usage |

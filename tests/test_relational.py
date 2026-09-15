@@ -220,6 +220,55 @@ class TestRelationalDatabase(unittest.TestCase):
         self.assertNotIn("zone", data)
         self.assertEqual(data["epg"], "EPG1")
 
+    def test_aggregate_network_relational(self):
+        db_structure = {
+            "datacenters": {"DC_Frankfurt": {"timeservers": ["10.10.10.1"]}},
+            "zones": {"Trusted": {}},
+            "environments": {"production": {}},
+            "bridge_domains": {"BD_Prod": {"datacenter": "DC_Frankfurt", "zone": "Trusted"}},
+            "epgs": {
+                "EPG_Web": {"bridge_domain": "BD_Prod", "environment": "production", "vlan": 10},
+                "EPG_App": {"bridge_domain": "BD_Prod", "environment": "production", "vlan": 20},
+            },
+            "networks": {
+                "corp_aggregate": {
+                    "cidr": "10.200.0.0/22",
+                    "aggregate": True,
+                    "datacenter": "DC_Frankfurt",
+                    "zone": "Trusted",
+                    "environment": "production",
+                },
+                "corp_web": {
+                    "cidr": "10.200.0.0/24",
+                    "epg": "EPG_Web",
+                },
+                "corp_app": {
+                    "cidr": "10.200.1.0/24",
+                    "epg": "EPG_App",
+                },
+            },
+        }
+        self._setup_relational_db(db_structure)
+
+        networks = load_all_networks(self.temp_dir)
+        self.assertEqual(len(networks), 3)
+
+        by_name = {n.name: n for n in networks}
+        agg = by_name["corp_aggregate"]
+        web = by_name["corp_web"]
+        app = by_name["corp_app"]
+
+        self.assertTrue(agg.aggregate)
+        self.assertEqual(len(agg.get_subnets(networks)), 2)
+        self.assertEqual(web.get_parent_aggregate(networks), agg)
+        self.assertEqual(app.get_parent_aggregate(networks), agg)
+
+        # Child subnets have their own EPG and VLAN
+        self.assertEqual(web.epg, "EPG_Web")
+        self.assertEqual(web.vlan, 10)
+        self.assertEqual(app.epg, "EPG_App")
+        self.assertEqual(app.vlan, 20)
+
 
 if __name__ == "__main__":
     unittest.main()

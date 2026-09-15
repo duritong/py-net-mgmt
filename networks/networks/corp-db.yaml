@@ -1,0 +1,3 @@
+cidr: 10.10.2.0/24
+epg: EPG_DB
+description: Corporate Database Tier

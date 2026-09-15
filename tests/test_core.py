@@ -360,5 +360,61 @@ class TestNetworkValidation(unittest.TestCase):
         self.assertEqual(net_dict["allocations"][0]["ip"], "10.0.1.10")
 
 
+class TestAggregateNetwork(unittest.TestCase):
+    def test_aggregate_properties(self):
+        agg = Network(name="agg_net", cidr="10.10.0.0/22", aggregate=True)
+        self.assertTrue(agg.aggregate)
+        self.assertIsNone(agg.gateway)
+        self.assertEqual(agg.effective_reservations, [])
+        self.assertTrue(agg.to_dict["aggregate"])
+
+    def test_aggregate_no_direct_allocations(self):
+        alloc = Allocation(ip="10.10.0.10", hostname="host1")
+        agg = Network(name="agg_net", cidr="10.10.0.0/22", aggregate=True, allocations=[alloc])
+        with self.assertRaises(DatabaseValidationError):
+            agg.validate()
+
+    def test_validate_aggregate_with_subnets(self):
+        agg = Network(name="corp_aggregate", cidr="10.10.0.0/22", aggregate=True)
+        sub1 = Network(name="sub1", cidr="10.10.0.0/24", epg="EPG1")
+        sub2 = Network(name="sub2", cidr="10.10.1.0/24", epg="EPG2")
+        sub3 = Network(name="sub3", cidr="10.10.2.0/24", epg="EPG3")
+        sub4 = Network(name="sub4", cidr="10.10.3.0/24", epg="EPG4")
+
+        networks = [agg, sub1, sub2, sub3, sub4]
+        # Should pass without errors
+        validate_network_list(networks)
+
+        # Check helper methods
+        self.assertEqual(len(agg.get_subnets(networks)), 4)
+        self.assertEqual(sub1.get_parent_aggregate(networks), agg)
+        self.assertEqual(agg.get_unallocated_subnets(networks), [])
+
+    def test_aggregate_partial_subnets_unallocated_capacity(self):
+        import ipaddress
+
+        agg = Network(name="corp_aggregate", cidr="10.10.0.0/22", aggregate=True)
+        sub1 = Network(name="sub1", cidr="10.10.0.0/24", epg="EPG1")
+        sub2 = Network(name="sub2", cidr="10.10.1.0/24", epg="EPG2")
+        networks = [agg, sub1, sub2]
+
+        validate_network_list(networks)
+        unallocated = agg.get_unallocated_subnets(networks)
+        self.assertEqual(unallocated, [ipaddress.ip_network("10.10.2.0/23")])
+
+    def test_aggregate_sibling_overlap_fails(self):
+        agg = Network(name="corp_aggregate", cidr="10.10.0.0/22", aggregate=True)
+        sub1 = Network(name="sub1", cidr="10.10.0.0/24", epg="EPG1")
+        sub2 = Network(name="sub2", cidr="10.10.0.128/25", epg="EPG2")  # Overlaps sub1
+        with self.assertRaises(DatabaseValidationError):
+            validate_network_list([agg, sub1, sub2])
+
+    def test_network_exceeding_aggregate_boundary_fails(self):
+        agg = Network(name="corp_aggregate", cidr="10.10.0.0/22", aggregate=True)
+        bad_sub = Network(name="bad_sub", cidr="10.10.0.0/21")  # Larger than aggregate
+        with self.assertRaises(DatabaseValidationError):
+            validate_network_list([agg, bad_sub])
+
+
 if __name__ == "__main__":
     unittest.main()

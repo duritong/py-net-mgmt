@@ -189,6 +189,7 @@ class Network:
     datacenter: Optional[str] = None
     routable: bool = True
     context: str = "default"
+    aggregate: bool = False
     description: Optional[str] = None
     file_path: Optional[str] = None
     reservations: List[Reservation] = field(default_factory=list)
@@ -222,6 +223,9 @@ class Network:
         self.static_routes = parsed_routes
 
     def _get_system_reservations(self) -> List[Reservation]:
+        if self.aggregate:
+            return []
+
         sys_res = []
 
         # Always reserve network address
@@ -293,8 +297,10 @@ class Network:
         return sys_res
 
     @property
-    def gateway(self) -> str:
+    def gateway(self) -> Optional[str]:
         """Calculate and return the default gateway of the network (first usable IP)."""
+        if self.aggregate:
+            return None
         return str(self.cidr.network_address + 1)
 
     @property
@@ -456,6 +462,11 @@ class Network:
     def validate(self):
         """Validate network configuration and reservations."""
         errors = []
+        if self.aggregate and self.allocations:
+            errors.append(
+                f"{self._error_prefix}Aggregate network cannot contain host allocations directly; "
+                f"allocations must belong to sub-prefix networks assigned to EPGs."
+            )
         eff_reservations = self.effective_reservations
 
         for reservation in eff_reservations:
@@ -746,6 +757,53 @@ class Network:
             self.save()
         return deleted
 
+    def get_subnets(self, all_networks: List["Network"]) -> List["Network"]:
+        """Return all child networks that are subnets within this aggregate network."""
+        if not self.aggregate:
+            return []
+        return [
+            n
+            for n in all_networks
+            if n != self and n.cidr != self.cidr and n.cidr.subnet_of(self.cidr) and n.context == self.context
+        ]
+
+    def get_parent_aggregate(self, all_networks: List["Network"]) -> Optional["Network"]:
+        """Return the immediate parent aggregate network for this network, if any."""
+        aggregates = [
+            n
+            for n in all_networks
+            if n != self
+            and n.aggregate
+            and n.cidr != self.cidr
+            and self.cidr.subnet_of(n.cidr)
+            and n.context == self.context
+        ]
+        if not aggregates:
+            return None
+        # Return the most specific aggregate (longest prefix length)
+        return max(aggregates, key=lambda u: u.cidr.prefixlen)
+
+    def get_unallocated_subnets(
+        self, all_networks: List["Network"]
+    ) -> List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]:
+        """Calculate unallocated CIDR blocks within this aggregate network."""
+        if not self.aggregate:
+            return []
+        children = self.get_subnets(all_networks)
+        free_blocks = [self.cidr]
+        for child in sorted(children, key=lambda c: c.cidr.prefixlen):
+            new_free = []
+            for block in free_blocks:
+                if child.cidr.subnet_of(block):
+                    try:
+                        new_free.extend(block.address_exclude(child.cidr))
+                    except ValueError:
+                        pass
+                else:
+                    new_free.append(block)
+            free_blocks = new_free
+        return sorted(free_blocks, key=lambda x: x.network_address)
+
     @property
     def to_dict(self) -> dict:
         """Convert Network to a dictionary representation (including nested lists)."""
@@ -765,6 +823,7 @@ class Network:
             "datacenter": self.datacenter,
             "routable": self.routable,
             "context": self.context,
+            "aggregate": self.aggregate,
             "reserve_gateway": self.reserve_gateway,
             "reserve_internal": self.reserve_internal,
             "reserve_internal_until": self.reserve_internal_until,
@@ -877,6 +936,32 @@ def validate_network_list(networks: List[Network]):
                 net1 = sorted_networks[i]
                 net2 = sorted_networks[j]
                 if net1.cidr.overlaps(net2.cidr):
+                    # Check aggregate containment: child subnets must be strict subnets of the aggregate
+                    is_child_of_1 = (
+                        net1.aggregate
+                        and not net2.aggregate
+                        and net2.cidr != net1.cidr
+                        and net2.cidr.subnet_of(net1.cidr)
+                    )
+                    if is_child_of_1:
+                        continue
+
+                    is_child_of_2 = (
+                        net2.aggregate
+                        and not net1.aggregate
+                        and net1.cidr != net2.cidr
+                        and net1.cidr.subnet_of(net2.cidr)
+                    )
+                    if is_child_of_2:
+                        continue
+
+                    if net1.aggregate and net2.aggregate:
+                        # Allow nested aggregates if one is a strict subnet of another
+                        nested = net1.cidr != net2.cidr and (
+                            net1.cidr.subnet_of(net2.cidr) or net2.cidr.subnet_of(net1.cidr)
+                        )
+                        if nested:
+                            continue
                     errors.append(
                         f"Network '{net1.name}' ({net1.cidr}, "
                         f"EPG: '{net1.epg or 'None'}', BD: '{net1.bridge_domain or 'None'}') "

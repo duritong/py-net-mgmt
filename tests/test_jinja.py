@@ -194,6 +194,19 @@ class TestJinjaRendering(unittest.TestCase):
         template3 = self.env.from_string("{{ ('192.168.1.1' | network_containing_ip) is none }}")
         self.assertEqual(template3.render(), "True")
 
+        # Longest prefix match with aggregate
+        agg = Network(name="agg", cidr="10.10.0.0/22", aggregate=True)
+        sub = Network(name="sub_web", cidr="10.10.0.0/24", epg="EPG_Web")
+        mock_get_db.return_value = [agg, sub]
+
+        # IP in child subnet returns child subnet
+        template4 = self.env.from_string("{{ ('10.10.0.50' | network_containing_ip).name }}")
+        self.assertEqual(template4.render(), "sub_web")
+
+        # IP in aggregate but not child subnet returns aggregate
+        template5 = self.env.from_string("{{ ('10.10.2.50' | network_containing_ip).name }}")
+        self.assertEqual(template5.render(), "agg")
+
     @patch("src.net_mgmt.jinja.get_database")
     def test_query_networks_filter(self, mock_get_db):
         nets = [
