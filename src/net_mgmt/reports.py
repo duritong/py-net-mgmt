@@ -87,14 +87,16 @@ def build_overview_table_rows(
         else:
             dc_label = "🏢 **unassigned**"
 
-        rows.append({
-            "label": dc_label,
-            "cidr": "",
-            "epg": "",
-            "vlan": "",
-            "context": "",
-            "description": "",
-        })
+        rows.append(
+            {
+                "label": dc_label,
+                "cidr": "",
+                "epg": "",
+                "vlan": "",
+                "context": "",
+                "description": "",
+            }
+        )
 
         for item_idx, (item_type, obj, item_nets) in enumerate(dc_items):
             is_last_dc_item = item_idx == len(dc_items) - 1
@@ -106,14 +108,16 @@ def build_overview_table_rows(
                 zone_label = (
                     f"📍 **[{zone_name}](zones/{zone_name}.md)**" if zone_name in zones else f"📍 **{zone_name}**"
                 )
-                rows.append({
-                    "label": f"{dc_conn}{zone_label}",
-                    "cidr": "",
-                    "epg": "",
-                    "vlan": "",
-                    "context": "",
-                    "description": "",
-                })
+                rows.append(
+                    {
+                        "label": f"{dc_conn}{zone_label}",
+                        "cidr": "",
+                        "epg": "",
+                        "vlan": "",
+                        "context": "",
+                        "description": "",
+                    }
+                )
 
                 zone_aggs = [n for n in item_nets if n.aggregate]
                 zone_aggs.sort(key=lambda a: a.name.lower())
@@ -148,14 +152,16 @@ def build_overview_table_rows(
 
                     if z_type == "aggregate":
                         agg = z_obj
-                        rows.append({
-                            "label": f"{dc_child_prefix}{zi_conn}📦 [**{agg.name}**](networks/{agg.name}.md)",
-                            "cidr": f"`{agg.cidr}`",
-                            "epg": "*Aggregate*",
-                            "vlan": "—",
-                            "context": f"`{agg.context or 'default'}`",
-                            "description": agg.description or "",
-                        })
+                        rows.append(
+                            {
+                                "label": f"{dc_child_prefix}{zi_conn}📦 [**{agg.name}**](networks/{agg.name}.md)",
+                                "cidr": f"`{agg.cidr}`",
+                                "epg": "*Aggregate*",
+                                "vlan": "—",
+                                "context": f"`{agg.context or 'default'}`",
+                                "description": agg.description or "",
+                            }
+                        )
                         for sub_idx, sub in enumerate(z_children):
                             is_last_sub = sub_idx == len(z_children) - 1
                             sub_conn = "└── " if is_last_sub else "├── "
@@ -165,14 +171,16 @@ def build_overview_table_rows(
                                 else (sub.epg or "None")
                             )
                             vlan_str = str(sub.vlan) if sub.vlan is not None else "—"
-                            rows.append({
-                                "label": f"{zi_child_prefix}{sub_conn}🔌 [{sub.name}](networks/{sub.name}.md)",
-                                "cidr": f"`{sub.cidr}`",
-                                "epg": epg_str,
-                                "vlan": vlan_str,
-                                "context": f"`{sub.context or 'default'}`",
-                                "description": sub.description or "",
-                            })
+                            rows.append(
+                                {
+                                    "label": f"{zi_child_prefix}{sub_conn}🔌 [{sub.name}](networks/{sub.name}.md)",
+                                    "cidr": f"`{sub.cidr}`",
+                                    "epg": epg_str,
+                                    "vlan": vlan_str,
+                                    "context": f"`{sub.context or 'default'}`",
+                                    "description": sub.description or "",
+                                }
+                            )
 
                     elif z_type == "bd":
                         bd_name = z_obj
@@ -181,14 +189,16 @@ def build_overview_table_rows(
                             if bd_name in bridge_domains
                             else f"🌉 **{bd_name}**"
                         )
-                        rows.append({
-                            "label": f"{dc_child_prefix}{zi_conn}{bd_label}",
-                            "cidr": "",
-                            "epg": "",
-                            "vlan": "",
-                            "context": "",
-                            "description": "",
-                        })
+                        rows.append(
+                            {
+                                "label": f"{dc_child_prefix}{zi_conn}{bd_label}",
+                                "cidr": "",
+                                "epg": "",
+                                "vlan": "",
+                                "context": "",
+                                "description": "",
+                            }
+                        )
                         for net_idx, net in enumerate(z_children):
                             is_last_net = net_idx == len(z_children) - 1
                             net_conn = "└── " if is_last_net else "├── "
@@ -198,76 +208,78 @@ def build_overview_table_rows(
                                 else (net.epg or "None")
                             )
                             vlan_str = str(net.vlan) if net.vlan is not None else "—"
-                            rows.append({
-                                "label": f"{zi_child_prefix}{net_conn}🔌 [{net.name}](networks/{net.name}.md)",
+                            rows.append(
+                                {
+                                    "label": f"{zi_child_prefix}{net_conn}🔌 [{net.name}](networks/{net.name}.md)",
+                                    "cidr": f"`{net.cidr}`",
+                                    "epg": epg_str,
+                                    "vlan": vlan_str,
+                                    "context": f"`{net.context or 'default'}`",
+                                    "description": net.description or "",
+                                }
+                            )
+
+                    elif z_type == "network":
+                        net = z_obj
+                        epg_str = (
+                            f"[{net.epg}](epgs/{net.epg}.md)" if (net.epg and net.epg in epgs) else (net.epg or "None")
+                        )
+                        vlan_str = str(net.vlan) if net.vlan is not None else "—"
+                        rows.append(
+                            {
+                                "label": f"{dc_child_prefix}{zi_conn}🔌 [{net.name}](networks/{net.name}.md)",
                                 "cidr": f"`{net.cidr}`",
                                 "epg": epg_str,
                                 "vlan": vlan_str,
                                 "context": f"`{net.context or 'default'}`",
                                 "description": net.description or "",
-                            })
-
-                    elif z_type == "network":
-                        net = z_obj
-                        epg_str = (
-                            f"[{net.epg}](epgs/{net.epg}.md)"
-                            if (net.epg and net.epg in epgs)
-                            else (net.epg or "None")
+                            }
                         )
-                        vlan_str = str(net.vlan) if net.vlan is not None else "—"
-                        rows.append({
-                            "label": f"{dc_child_prefix}{zi_conn}🔌 [{net.name}](networks/{net.name}.md)",
-                            "cidr": f"`{net.cidr}`",
-                            "epg": epg_str,
-                            "vlan": vlan_str,
-                            "context": f"`{net.context or 'default'}`",
-                            "description": net.description or "",
-                        })
 
             elif item_type == "aggregate":
                 agg = obj
-                rows.append({
-                    "label": f"{dc_conn}📦 [**{agg.name}**](networks/{agg.name}.md)",
-                    "cidr": f"`{agg.cidr}`",
-                    "epg": "*Aggregate*",
-                    "vlan": "—",
-                    "context": f"`{agg.context or 'default'}`",
-                    "description": agg.description or "",
-                })
+                rows.append(
+                    {
+                        "label": f"{dc_conn}📦 [**{agg.name}**](networks/{agg.name}.md)",
+                        "cidr": f"`{agg.cidr}`",
+                        "epg": "*Aggregate*",
+                        "vlan": "—",
+                        "context": f"`{agg.context or 'default'}`",
+                        "description": agg.description or "",
+                    }
+                )
                 for sub_idx, sub in enumerate(item_nets):
                     is_last_sub = sub_idx == len(item_nets) - 1
                     sub_conn = "└── " if is_last_sub else "├── "
                     epg_str = (
-                        f"[{sub.epg}](epgs/{sub.epg}.md)"
-                        if (sub.epg and sub.epg in epgs)
-                        else (sub.epg or "None")
+                        f"[{sub.epg}](epgs/{sub.epg}.md)" if (sub.epg and sub.epg in epgs) else (sub.epg or "None")
                     )
                     vlan_str = str(sub.vlan) if sub.vlan is not None else "—"
-                    rows.append({
-                        "label": f"{dc_child_prefix}{sub_conn}🔌 [{sub.name}](networks/{sub.name}.md)",
-                        "cidr": f"`{sub.cidr}`",
-                        "epg": epg_str,
-                        "vlan": vlan_str,
-                        "context": f"`{sub.context or 'default'}`",
-                        "description": sub.description or "",
-                    })
+                    rows.append(
+                        {
+                            "label": f"{dc_child_prefix}{sub_conn}🔌 [{sub.name}](networks/{sub.name}.md)",
+                            "cidr": f"`{sub.cidr}`",
+                            "epg": epg_str,
+                            "vlan": vlan_str,
+                            "context": f"`{sub.context or 'default'}`",
+                            "description": sub.description or "",
+                        }
+                    )
 
             elif item_type == "network":
                 net = obj
-                epg_str = (
-                    f"[{net.epg}](epgs/{net.epg}.md)"
-                    if (net.epg and net.epg in epgs)
-                    else (net.epg or "None")
-                )
+                epg_str = f"[{net.epg}](epgs/{net.epg}.md)" if (net.epg and net.epg in epgs) else (net.epg or "None")
                 vlan_str = str(net.vlan) if net.vlan is not None else "—"
-                rows.append({
-                    "label": f"{dc_conn}🔌 [{net.name}](networks/{net.name}.md)",
-                    "cidr": f"`{net.cidr}`",
-                    "epg": epg_str,
-                    "vlan": vlan_str,
-                    "context": f"`{net.context or 'default'}`",
-                    "description": net.description or "",
-                })
+                rows.append(
+                    {
+                        "label": f"{dc_conn}🔌 [{net.name}](networks/{net.name}.md)",
+                        "cidr": f"`{net.cidr}`",
+                        "epg": epg_str,
+                        "vlan": vlan_str,
+                        "context": f"`{net.context or 'default'}`",
+                        "description": net.description or "",
+                    }
+                )
 
     return rows
 
