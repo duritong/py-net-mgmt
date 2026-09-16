@@ -122,6 +122,58 @@ class TestMarkdownReport(unittest.TestCase):
 
         self.assertEqual(readme_content, "# Custom Index\nTotal: 0")
 
+    def test_tree_table_overview_with_aggregates(self):
+        agg = Network(
+            name="corp-agg",
+            cidr="10.10.0.0/22",
+            aggregate=True,
+            datacenter="DC1",
+            zone="zoneA",
+            description="Aggregate 22",
+        )
+        sub1 = Network(
+            name="sub1",
+            cidr="10.10.0.0/24",
+            datacenter="DC1",
+            zone="zoneA",
+            epg="EPG1",
+            vlan=10,
+            description="Subnet 1",
+        )
+        sub2 = Network(
+            name="sub2",
+            cidr="10.10.1.0/24",
+            datacenter="DC1",
+            zone="zoneA",
+            epg="EPG2",
+            vlan=20,
+            description="Subnet 2",
+        )
+        standalone = Network(
+            name="standalone",
+            cidr="10.20.0.0/24",
+            datacenter="DC1",
+            zone="zoneA",
+            bridge_domain="BD1",
+            epg="EPG1",
+            vlan=10,
+        )
+
+        generate_markdown_report([agg, sub1, sub2, standalone], self.output_dir)
+        readme_path = os.path.join(self.output_dir, "README.md")
+        with open(readme_path, "r") as f:
+            content = f.read()
+
+        # Check table headers
+        self.assertIn("| Topology / Network | CIDR | EPG | VLAN | Context | Description |", content)
+        # Check aggregate and nested subnets
+        self.assertIn("📦 [**corp-agg**](networks/corp-agg.md)", content)
+        self.assertIn("🔌 [sub1](networks/sub1.md)", content)
+        self.assertIn("🔌 [sub2](networks/sub2.md)", content)
+        # Check bridge domain and standalone network
+        self.assertIn("🌉 **BD1**", content)
+        self.assertIn("🔌 [standalone](networks/standalone.md)", content)
+
 
 if __name__ == "__main__":
     unittest.main()

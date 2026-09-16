@@ -10,6 +10,268 @@ from .db import get_cached_entities, set_db_path
 DEFAULT_TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 
+def build_overview_table_rows(
+    sorted_networks: List[Network],
+    datacenters: dict,
+    zones: dict,
+    bridge_domains: dict,
+    epgs: dict,
+) -> List[dict]:
+    # 1. Identify aggregates and map them to their subnets
+    aggregates = [n for n in sorted_networks if n.aggregate]
+    aggregate_subnets = {}
+    all_child_subnet_names = set()
+    for agg in aggregates:
+        subnets = sorted(agg.get_subnets(sorted_networks), key=lambda s: s.cidr)
+        aggregate_subnets[agg.name] = subnets
+        for s in subnets:
+            all_child_subnet_names.add(s.name)
+
+    # 2. Filter out purely unassigned networks (no DC, Zone, BD, EPG, aggregate, and not a child subnet)
+    hierarchical_networks = []
+    for net in sorted_networks:
+        is_unassigned = (
+            not (net.datacenter or net.zone or net.bridge_domain or net.environment or net.epg or net.aggregate)
+            and net.name not in all_child_subnet_names
+        )
+        if not is_unassigned:
+            hierarchical_networks.append(net)
+
+    if not hierarchical_networks:
+        return []
+
+    # Helper for sorting keys: empty/None values sort last, then case-insensitive alphabetical
+    def sort_key(val: Optional[str]):
+        return (val is None or val == "", (val or "").lower())
+
+    # Group hierarchical networks by Datacenter -> Zone
+    dc_groups = {}
+    for net in hierarchical_networks:
+        dc_val = net.datacenter
+        zone_val = net.zone
+        dc_groups.setdefault(dc_val, {}).setdefault(zone_val, []).append(net)
+
+    sorted_dcs = sorted(dc_groups.keys(), key=sort_key)
+    rows = []
+
+    for dc in sorted_dcs:
+        zone_map = dc_groups[dc]
+
+        defined_zones = [z for z in zone_map.keys() if z]
+        defined_zones.sort(key=lambda z: z.lower())
+
+        direct_dc_nets = []
+        for z in [z for z in zone_map.keys() if not z]:
+            for n in zone_map[z]:
+                if not n.aggregate and n.name not in all_child_subnet_names:
+                    direct_dc_nets.append(n)
+        direct_dc_nets.sort(key=lambda n: n.name.lower())
+
+        dc_level_aggs = []
+        for z in [z for z in zone_map.keys() if not z]:
+            for n in zone_map[z]:
+                if n.aggregate:
+                    dc_level_aggs.append(n)
+        dc_level_aggs.sort(key=lambda a: a.name.lower())
+
+        dc_items = []
+        for z in defined_zones:
+            dc_items.append(("zone", z, zone_map[z]))
+        for agg in dc_level_aggs:
+            dc_items.append(("aggregate", agg, aggregate_subnets.get(agg.name, [])))
+        for net in direct_dc_nets:
+            dc_items.append(("network", net, []))
+
+        if dc:
+            dc_label = f"🏢 **[{dc}](datacenters/{dc}.md)**" if dc in datacenters else f"🏢 **{dc}**"
+        else:
+            dc_label = "🏢 **unassigned**"
+
+        rows.append({
+            "label": dc_label,
+            "cidr": "",
+            "epg": "",
+            "vlan": "",
+            "context": "",
+            "description": "",
+        })
+
+        for item_idx, (item_type, obj, item_nets) in enumerate(dc_items):
+            is_last_dc_item = item_idx == len(dc_items) - 1
+            dc_conn = "└── " if is_last_dc_item else "├── "
+            dc_child_prefix = "    " if is_last_dc_item else "│   "
+
+            if item_type == "zone":
+                zone_name = obj
+                zone_label = (
+                    f"📍 **[{zone_name}](zones/{zone_name}.md)**" if zone_name in zones else f"📍 **{zone_name}**"
+                )
+                rows.append({
+                    "label": f"{dc_conn}{zone_label}",
+                    "cidr": "",
+                    "epg": "",
+                    "vlan": "",
+                    "context": "",
+                    "description": "",
+                })
+
+                zone_aggs = [n for n in item_nets if n.aggregate]
+                zone_aggs.sort(key=lambda a: a.name.lower())
+
+                zone_bds = {}
+                zone_direct_nets = []
+                for n in item_nets:
+                    if n.aggregate:
+                        continue
+                    if n.name in all_child_subnet_names:
+                        continue
+                    if n.bridge_domain:
+                        zone_bds.setdefault(n.bridge_domain, []).append(n)
+                    else:
+                        zone_direct_nets.append(n)
+
+                sorted_bd_names = sorted(zone_bds.keys(), key=lambda b: b.lower())
+                zone_direct_nets.sort(key=lambda n: n.name.lower())
+
+                zone_items = []
+                for agg in zone_aggs:
+                    zone_items.append(("aggregate", agg, aggregate_subnets.get(agg.name, [])))
+                for bd_name in sorted_bd_names:
+                    zone_items.append(("bd", bd_name, sorted(zone_bds[bd_name], key=lambda n: n.name.lower())))
+                for net in zone_direct_nets:
+                    zone_items.append(("network", net, []))
+
+                for z_idx, (z_type, z_obj, z_children) in enumerate(zone_items):
+                    is_last_zi = z_idx == len(zone_items) - 1
+                    zi_conn = "└── " if is_last_zi else "├── "
+                    zi_child_prefix = dc_child_prefix + ("    " if is_last_zi else "│   ")
+
+                    if z_type == "aggregate":
+                        agg = z_obj
+                        rows.append({
+                            "label": f"{dc_child_prefix}{zi_conn}📦 [**{agg.name}**](networks/{agg.name}.md)",
+                            "cidr": f"`{agg.cidr}`",
+                            "epg": "*Aggregate*",
+                            "vlan": "—",
+                            "context": f"`{agg.context or 'default'}`",
+                            "description": agg.description or "",
+                        })
+                        for sub_idx, sub in enumerate(z_children):
+                            is_last_sub = sub_idx == len(z_children) - 1
+                            sub_conn = "└── " if is_last_sub else "├── "
+                            epg_str = (
+                                f"[{sub.epg}](epgs/{sub.epg}.md)"
+                                if (sub.epg and sub.epg in epgs)
+                                else (sub.epg or "None")
+                            )
+                            vlan_str = str(sub.vlan) if sub.vlan is not None else "—"
+                            rows.append({
+                                "label": f"{zi_child_prefix}{sub_conn}🔌 [{sub.name}](networks/{sub.name}.md)",
+                                "cidr": f"`{sub.cidr}`",
+                                "epg": epg_str,
+                                "vlan": vlan_str,
+                                "context": f"`{sub.context or 'default'}`",
+                                "description": sub.description or "",
+                            })
+
+                    elif z_type == "bd":
+                        bd_name = z_obj
+                        bd_label = (
+                            f"🌉 **[{bd_name}](bridge_domains/{bd_name}.md)**"
+                            if bd_name in bridge_domains
+                            else f"🌉 **{bd_name}**"
+                        )
+                        rows.append({
+                            "label": f"{dc_child_prefix}{zi_conn}{bd_label}",
+                            "cidr": "",
+                            "epg": "",
+                            "vlan": "",
+                            "context": "",
+                            "description": "",
+                        })
+                        for net_idx, net in enumerate(z_children):
+                            is_last_net = net_idx == len(z_children) - 1
+                            net_conn = "└── " if is_last_net else "├── "
+                            epg_str = (
+                                f"[{net.epg}](epgs/{net.epg}.md)"
+                                if (net.epg and net.epg in epgs)
+                                else (net.epg or "None")
+                            )
+                            vlan_str = str(net.vlan) if net.vlan is not None else "—"
+                            rows.append({
+                                "label": f"{zi_child_prefix}{net_conn}🔌 [{net.name}](networks/{net.name}.md)",
+                                "cidr": f"`{net.cidr}`",
+                                "epg": epg_str,
+                                "vlan": vlan_str,
+                                "context": f"`{net.context or 'default'}`",
+                                "description": net.description or "",
+                            })
+
+                    elif z_type == "network":
+                        net = z_obj
+                        epg_str = (
+                            f"[{net.epg}](epgs/{net.epg}.md)"
+                            if (net.epg and net.epg in epgs)
+                            else (net.epg or "None")
+                        )
+                        vlan_str = str(net.vlan) if net.vlan is not None else "—"
+                        rows.append({
+                            "label": f"{dc_child_prefix}{zi_conn}🔌 [{net.name}](networks/{net.name}.md)",
+                            "cidr": f"`{net.cidr}`",
+                            "epg": epg_str,
+                            "vlan": vlan_str,
+                            "context": f"`{net.context or 'default'}`",
+                            "description": net.description or "",
+                        })
+
+            elif item_type == "aggregate":
+                agg = obj
+                rows.append({
+                    "label": f"{dc_conn}📦 [**{agg.name}**](networks/{agg.name}.md)",
+                    "cidr": f"`{agg.cidr}`",
+                    "epg": "*Aggregate*",
+                    "vlan": "—",
+                    "context": f"`{agg.context or 'default'}`",
+                    "description": agg.description or "",
+                })
+                for sub_idx, sub in enumerate(item_nets):
+                    is_last_sub = sub_idx == len(item_nets) - 1
+                    sub_conn = "└── " if is_last_sub else "├── "
+                    epg_str = (
+                        f"[{sub.epg}](epgs/{sub.epg}.md)"
+                        if (sub.epg and sub.epg in epgs)
+                        else (sub.epg or "None")
+                    )
+                    vlan_str = str(sub.vlan) if sub.vlan is not None else "—"
+                    rows.append({
+                        "label": f"{dc_child_prefix}{sub_conn}🔌 [{sub.name}](networks/{sub.name}.md)",
+                        "cidr": f"`{sub.cidr}`",
+                        "epg": epg_str,
+                        "vlan": vlan_str,
+                        "context": f"`{sub.context or 'default'}`",
+                        "description": sub.description or "",
+                    })
+
+            elif item_type == "network":
+                net = obj
+                epg_str = (
+                    f"[{net.epg}](epgs/{net.epg}.md)"
+                    if (net.epg and net.epg in epgs)
+                    else (net.epg or "None")
+                )
+                vlan_str = str(net.vlan) if net.vlan is not None else "—"
+                rows.append({
+                    "label": f"{dc_conn}🔌 [{net.name}](networks/{net.name}.md)",
+                    "cidr": f"`{net.cidr}`",
+                    "epg": epg_str,
+                    "vlan": vlan_str,
+                    "context": f"`{net.context or 'default'}`",
+                    "description": net.description or "",
+                })
+
+    return rows
+
+
 def generate_markdown_report(networks: List[Network], output_dir: str, templates_dir: Optional[str] = None):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -145,11 +407,20 @@ def generate_markdown_report(networks: List[Network], output_dir: str, templates
                 epg, []
             ).append(net)
 
+    rows = build_overview_table_rows(
+        sorted_networks=sorted_networks,
+        datacenters=datacenters,
+        zones=zones,
+        bridge_domains=bridge_domains,
+        epgs=epgs,
+    )
+
     content = env.get_template("index.md").render(
         tree=tree,
         unassigned_networks=unassigned_networks,
         aggregate_networks=aggregate_networks,
         all_networks=sorted_networks,
+        rows=rows,
     )
     with open(os.path.join(output_dir, "README.md"), "w", encoding="utf-8") as f:
         f.write(content)

@@ -1,25 +1,12 @@
 # Network Overview
 
-## 🗺️ Directory Hierarchy Tree
-
-{% for dc, zones in tree.items() %}
-- 🏢 **[{{ dc }}](datacenters/{{ dc }}.md)**
-  {% for zone, bds in zones.items() %}
-  - 📍 **[{{ zone }}](zones/{{ zone }}.md)**
-    {% for bd, envs in bds.items() %}
-      - 🌉 **[{{ bd }}](bridge_domains/{{ bd }}.md)**
-        {% for env, epgs in envs.items() %}
-          - 🌍 **[{{ env }}](environments/{{ env }}.md)**
-            {% for epg, nets in epgs.items() %}
-              - 🏷️ **[{{ epg }}](epgs/{{ epg }}.md)**
-                {% for net in nets %}
-                - 🔌 **[{{ net.name }}](networks/{{ net.name }}.md)** (`{{ net.cidr }}`){% if net.description %} — *{{ net.description }}*{% endif %}
-                {% endfor %}
-            {% endfor %}
-        {% endfor %}
-    {% endfor %}
-  {% endfor %}
+{% if rows %}
+| Topology / Network | CIDR | EPG | VLAN | Context | Description |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+{% for row in rows -%}
+| {{ row.label }} | {{ row.cidr }} | {{ row.epg }} | {{ row.vlan }} | {{ row.context }} | {{ row.description }} |
 {% endfor %}
+{% endif %}
 
 {% if unassigned_networks %}
 ---
@@ -29,17 +16,5 @@
 | --- | --- | --- | --- | --- |
 {% for net in unassigned_networks -%}
 | [{{ net.name }}](networks/{{ net.name }}.md) | `{{ net.cidr }}` | `{{ net.context or 'default' }}` | `{{ net.vlan or 'None' }}` | {{ net.description or '' }} |
-{% endfor %}
-{% endif %}
-
-{% if aggregate_networks %}
----
-
-## 📦 Aggregate Networks
-| Aggregate Network | CIDR | Subnets | Context | Description |
-| --- | --- | --- | --- | --- |
-{% for agg in aggregate_networks -%}
-{% set child_nets = agg.get_subnets(all_networks) if all_networks else [] -%}
-| [{{ agg.name }}](networks/{{ agg.name }}.md) | `{{ agg.cidr }}` | {{ child_nets | length }} subnets | `{{ agg.context or 'default' }}` | {{ agg.description or '' }} |
 {% endfor %}
 {% endif %}
