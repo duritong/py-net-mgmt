@@ -2,10 +2,6 @@
 
 ## Properties
 
-
-
-
-
 ## Associated Subnets
 | Network Name | CIDR | Context | Description |
 | --- | --- | --- | --- |

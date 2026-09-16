@@ -4,7 +4,6 @@
 - **Datacenter**: [DC_Frankfurt](../datacenters/DC_Frankfurt.md)
 - **Zone**: [Trusted](../zones/Trusted.md)
 
-
 ## Associated Subnets
 | Network Name | CIDR | Context | Description |
 | --- | --- | --- | --- |

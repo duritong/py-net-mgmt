@@ -174,6 +174,21 @@ class TestMarkdownReport(unittest.TestCase):
         self.assertIn("🌉 **BD1**", content)
         self.assertIn("🔌 [standalone](networks/standalone.md)", content)
 
+    def test_static_routes_rendering_no_empty_lines(self):
+        sr1 = {"cidr": "192.168.1.0/24", "gateway": "10.0.0.1"}
+        sr2 = {"cidr": "192.168.2.0/24", "gateway": "10.0.0.1"}
+        net = Network(name="route_net", cidr="10.0.0.0/24", static_routes=[sr1, sr2])
+
+        generate_markdown_report([net], self.output_dir)
+        net_path = os.path.join(self.output_dir, "networks", "route_net.md")
+        with open(net_path, "r") as f:
+            content = f.read()
+
+        expected_routes = (
+            "- **Static Routes**:\n  - `192.168.1.0/24 via 10.0.0.1`\n  - `192.168.2.0/24 via 10.0.0.1`\n- **Zone**:"
+        )
+        self.assertIn(expected_routes, content)
+
 
 if __name__ == "__main__":
     unittest.main()

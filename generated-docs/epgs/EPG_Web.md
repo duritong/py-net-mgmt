@@ -5,7 +5,6 @@
 - **Bridge Domain**: [BD_Prod](../bridge_domains/BD_Prod.md)
 - **Environment**: [](../environments/.md)
 
-
 ## Associated Subnets
 | Network Name | CIDR | Context | Description |
 | --- | --- | --- | --- |
