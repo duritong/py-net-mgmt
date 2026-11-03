@@ -101,7 +101,7 @@ if __name__ == "__main__":
 ```
 
 ### Continuous Integration & Matrix Testing
-The repository CI pipeline runs via GitHub Actions (`.github/workflows/ci.yml`) across all supported Python versions:
+The repository CI pipeline runs via GitHub Actions (`.github/workflows/test.yml`) across all supported Python versions:
 - **Matrix Versions**: Python `3.9`, `3.10`, `3.11`, `3.12`, `3.13`, `3.14`, and `3.15`.
 
 ### Dependency Management & Dependabot
