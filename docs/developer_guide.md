@@ -100,6 +100,15 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
+### Continuous Integration & Matrix Testing
+The repository CI pipeline runs via GitHub Actions (`.github/workflows/ci.yml`) across all supported Python versions:
+- **Matrix Versions**: Python `3.9`, `3.10`, `3.11`, `3.12`, `3.13`, `3.14`, and `3.15`.
+
+### Dependency Management & Dependabot
+Dependencies and CI actions are kept up to date automatically using Dependabot (`.github/dependabot.yml`):
+- **`pip` ecosystem**: Weekly scans for Python package updates declared in `pyproject.toml`.
+- **`github-actions` ecosystem**: Weekly scans for action versions in GitHub Actions workflows.
+
 ---
 
 ## 5. Symmetrical Hierarchical Level Mandate
