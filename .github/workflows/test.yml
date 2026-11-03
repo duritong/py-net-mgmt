@@ -60,7 +60,7 @@ jobs:
       shell: bash
       run: |
         activate-global-python-argcomplete --help
-        completion="$(rh-support-cli completion)"
+        completion="$(net-mgmt completion)"
         test -n "$completion"
         bash -n <<< "$completion"
 
