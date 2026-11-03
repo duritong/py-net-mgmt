@@ -1112,6 +1112,18 @@ def format_cmd(path):
     run_format(path)
 
 
+@cli.command("completion")
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]), default="bash", required=False)
+def completion_cmd(shell):
+    """Output shell completion script for bash, zsh, or fish"""
+    from click.shell_completion import get_completion_class
+
+    comp_cls = get_completion_class(shell)
+    if comp_cls:
+        comp = comp_cls(cli, {}, "net-mgmt", "_NET_MGMT_COMPLETE")
+        click.echo(comp.source().rstrip())
+
+
 def main():
     cli()
 

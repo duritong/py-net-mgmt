@@ -14,25 +14,28 @@ The CLI main entrypoint is `net-mgmt`. You can configure the directory containin
 ### Shell Completion
 Since `net-mgmt` is built using the standard Python Click library, it natively supports complete tab-completion for all commands, options, and directories out-of-the-box.
 
-To enable auto-completion for your active shell, run or add the corresponding command to your shell configuration file:
+You can print the shell completion script directly using the `completion` command:
 
 #### For Bash
 Add this to your `~/.bashrc` or `~/.bash_profile`:
 ```bash
-eval "$(_NET_MGMT_COMPLETE=bash_source net-mgmt)"
+eval "$(net-mgmt completion bash)"
 ```
+*(or simply: `eval "$(net-mgmt completion)"`)*
 
 #### For Zsh
 Add this to your `~/.zshrc`:
 ```zsh
-eval "$(_NET_MGMT_COMPLETE=zsh_source net-mgmt)"
+eval "$(net-mgmt completion zsh)"
 ```
 
 #### For Fish
 Add this to your `~/.config/fish/config.fish`:
 ```fish
-eval (env _NET_MGMT_COMPLETE=fish_source net-mgmt)
+net-mgmt completion fish | source
 ```
+
+*(Alternatively, Click's native environment variables like `eval "$(_NET_MGMT_COMPLETE=bash_source net-mgmt)"` are also supported).*
 
 Restart your terminal or run `source ~/.bashrc` to instantly activate auto-completion!
 
@@ -219,6 +222,22 @@ net-mgmt validate
 
 # Validate and automatically format/order all files upon successful validation
 net-mgmt validate --format
+```
+
+---
+
+### Command: `completion`
+Outputs the shell completion script for the specified shell (`bash`, `zsh`, or `fish`). Defaults to `bash`.
+
+```bash
+# Print Bash completion script (default)
+net-mgmt completion
+
+# Print Zsh completion script
+net-mgmt completion zsh
+
+# Print Fish completion script
+net-mgmt completion fish
 ```
 
 ---

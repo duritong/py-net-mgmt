@@ -76,8 +76,12 @@ Always run both `ruff check .` and `ruff format --check .` before submitting pul
 The test suite uses the standard Python `unittest` framework. All test files reside inside `tests/`.
 
 ### Running Tests
-To run all tests, you **must** set the `PYTHONPATH` environment variable to include the `src` layout directory:
+To run all tests, you can execute either:
 
+```bash
+python -m tests
+```
+or using `unittest` discovery:
 ```bash
 PYTHONPATH=src python -m unittest discover tests
 ```
