@@ -140,6 +140,12 @@ class Reservation:
                 return True
         return False
 
+    def overlaps_network(self, other_net: Union[ipaddress.IPv4Network, ipaddress.IPv6Network]) -> bool:
+        for net in self.networks:
+            if net.overlaps(other_net):
+                return True
+        return False
+
     def iter_ips(self) -> Generator[Union[ipaddress.IPv4Address, ipaddress.IPv6Address], None, None]:
         for net in self.networks:
             for ip in net:
@@ -312,9 +318,11 @@ class Network:
     def effective_reservations(self) -> List[Reservation]:
         return self.reservations + self._get_system_reservations()
 
-    def get_unreserved_ranges(self) -> List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]:
+    def get_unreserved_ranges(
+        self, target_cidr: Optional[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]] = None
+    ) -> List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]:
         """Calculate network ranges not covered by any reservation."""
-        free_nets = [self.cidr]
+        free_nets = [target_cidr if target_cidr is not None else self.cidr]
         reservations = self.effective_reservations
 
         for res in reservations:
@@ -356,9 +364,11 @@ class Network:
 
         return sorted(filtered_nets, key=lambda x: x.network_address)
 
-    def get_unreserved_display_ranges(self) -> List[str]:
+    def get_unreserved_display_ranges(
+        self, target_cidr: Optional[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]] = None
+    ) -> List[str]:
         """Merge adjacent unreserved CIDR blocks into contiguous human-readable IP ranges."""
-        nets = self.get_unreserved_ranges()
+        nets = self.get_unreserved_ranges(target_cidr=target_cidr)
         if not nets:
             return []
 
@@ -447,6 +457,154 @@ class Network:
                 continue
 
         return results
+
+    def get_ip_info(self, ip: Union[str, ipaddress.IPv4Address, ipaddress.IPv6Address]) -> Optional[dict]:
+        """
+        Retrieve detailed allocation, reservation, and hierarchy metadata for a given IP address within this network.
+        """
+        if isinstance(ip, str):
+            target_ip = ipaddress.ip_address(ip)
+        else:
+            target_ip = ip
+
+        if target_ip not in self.cidr:
+            return None
+
+        # Check allocations
+        matched_alloc = None
+        alloc_type = None
+        for alloc in self.allocations:
+            if alloc.ip and alloc.ip == target_ip:
+                matched_alloc = alloc
+                alloc_type = "single"
+                break
+
+        if not matched_alloc:
+            for alloc in self.allocations:
+                if alloc.cidr:
+                    for alloc_net in alloc.networks:
+                        if target_ip in alloc_net:
+                            matched_alloc = alloc
+                            alloc_type = "range" if "-" in str(alloc.cidr) else "subnet"
+                            break
+                    if matched_alloc:
+                        break
+
+        # Check reservations
+        matching_reservations = [r for r in self.effective_reservations if r.contains_ip(target_ip)]
+        matched_res = None
+        if matching_reservations:
+            custom_res = [r for r in matching_reservations if not r.id.startswith("sys-")]
+            matched_res = custom_res[0] if custom_res else matching_reservations[0]
+
+        # Determine status
+        if matched_alloc is not None:
+            status = "allocated"
+        elif matched_res is not None:
+            if matched_res.allocatable:
+                status = "available"
+            else:
+                status = "reserved"
+        else:
+            status = "unreserved"
+
+        alloc_dict = None
+        if matched_alloc is not None:
+            alloc_dict = matched_alloc.to_dict
+            alloc_dict["type"] = alloc_type
+
+        res_dict = None
+        if matched_res is not None:
+            res_dict = matched_res.to_dict
+
+        return {
+            "ip": str(target_ip),
+            "network": self.name,
+            "network_cidr": str(self.cidr),
+            "status": status,
+            "allocation": alloc_dict,
+            "reservation": res_dict,
+            "context": self.context,
+            "vlan": self.vlan,
+            "bridge_domain": self.bridge_domain,
+            "environment": self.environment,
+            "epg": self.epg,
+            "zone": self.zone,
+            "datacenter": self.datacenter,
+            "gateway": self.gateway,
+            "default_mtu": self.default_mtu,
+            "dns_nameservers": self.dns_nameservers,
+            "dns_search": self.dns_search,
+            "timeservers": self.timeservers,
+            "description": self.description,
+            "routable": self.routable,
+            "aggregate": self.aggregate,
+        }
+
+    def get_cidr_info(self, target_cidr: Union[str, ipaddress.IPv4Network, ipaddress.IPv6Network]) -> Optional[dict]:
+        """Retrieve detailed CIDR subnet information within this network."""
+        if isinstance(target_cidr, str):
+            net = ipaddress.ip_network(target_cidr, strict=False)
+        else:
+            net = target_cidr
+
+        if not (net.subnet_of(self.cidr) or net == self.cidr):
+            return None
+
+        is_exact = net == self.cidr
+
+        # Overlapping / contained reservations
+        overlapping_res = []
+        for r in self.effective_reservations:
+            if any(rn.overlaps(net) for rn in r.networks):
+                overlapping_res.append(r.to_dict)
+
+        # Overlapping / contained allocations
+        overlapping_allocs = []
+        for a in self.allocations:
+            if a.ip:
+                if a.ip in net:
+                    d = a.to_dict
+                    d["type"] = "single"
+                    overlapping_allocs.append(d)
+            elif a.cidr:
+                if any(an.overlaps(net) for an in a.networks):
+                    d = a.to_dict
+                    d["type"] = "range" if "-" in str(a.cidr) else "subnet"
+                    overlapping_allocs.append(d)
+
+        # Unreserved ranges within target CIDR
+        unreserved = self.get_unreserved_display_ranges(target_cidr=net)
+
+        bcast = str(net.broadcast_address) if isinstance(net, ipaddress.IPv4Network) else None
+
+        return {
+            "cidr": str(net),
+            "network": self.name,
+            "network_cidr": str(self.cidr),
+            "is_exact_network": is_exact,
+            "num_addresses": net.num_addresses,
+            "network_address": str(net.network_address),
+            "broadcast_address": bcast,
+            "reservations": overlapping_res,
+            "allocations": overlapping_allocs,
+            "unreserved_ranges": unreserved,
+            "context": self.context,
+            "vlan": self.vlan,
+            "bridge_domain": self.bridge_domain,
+            "environment": self.environment,
+            "epg": self.epg,
+            "zone": self.zone,
+            "datacenter": self.datacenter,
+            "gateway": self.gateway,
+            "default_mtu": self.default_mtu,
+            "dns_nameservers": self.dns_nameservers,
+            "dns_search": self.dns_search,
+            "timeservers": self.timeservers,
+            "description": self.description,
+            "routable": self.routable,
+            "aggregate": self.aggregate,
+        }
 
     def _get_alloc_ident(self, alloc: Allocation) -> str:
         parts = []
@@ -1080,3 +1238,166 @@ def query_networks(networks: List[Network], filters: Optional[dict] = None, **kw
             filtered.append(net)
 
     return filtered
+
+
+def find_network_for_ip(
+    ip: Union[str, ipaddress.IPv4Address, ipaddress.IPv6Address],
+    networks: List[Network],
+    context: Optional[str] = None,
+) -> Optional[Network]:
+    """Find the best matching network containing a given IP address (longest prefix match)."""
+    if isinstance(ip, str):
+        target_ip = ipaddress.ip_address(ip.strip())
+    else:
+        target_ip = ip
+
+    candidate_nets = [n for n in networks if context is None or n.context == context]
+    matching = [n for n in candidate_nets if target_ip in n.cidr]
+    if not matching:
+        return None
+
+    matching.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+    return matching[0]
+
+
+def find_networks_for_cidr(
+    cidr: Union[str, ipaddress.IPv4Network, ipaddress.IPv6Network],
+    networks: List[Network],
+    context: Optional[str] = None,
+) -> List[Network]:
+    """Find all networks that contain or match the given CIDR network, sorted by longest prefix match."""
+    if isinstance(cidr, str):
+        target_net = ipaddress.ip_network(cidr.strip(), strict=False)
+    else:
+        target_net = cidr
+
+    candidate_nets = [n for n in networks if context is None or n.context == context]
+    matching = [n for n in candidate_nets if target_net.subnet_of(n.cidr) or target_net == n.cidr]
+    matching.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+    return matching
+
+
+def lookup_ip_or_cidr(
+    target: Union[str, ipaddress.IPv4Address, ipaddress.IPv6Address, ipaddress.IPv4Network, ipaddress.IPv6Network],
+    networks: List[Network],
+    context: Optional[str] = None,
+) -> dict:
+    """
+    Perform a comprehensive lookup for an IP address or CIDR network across available networks.
+    Returns structured details including matching network, hierarchy, status, reservations, and allocations.
+    """
+    target_str = str(target).strip()
+    is_ip = False
+    is_cidr = False
+    parsed_ip = None
+    parsed_net = None
+
+    if isinstance(target, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
+        is_ip = True
+        parsed_ip = target
+    elif isinstance(target, (ipaddress.IPv4Network, ipaddress.IPv6Network)):
+        if target.num_addresses == 1:
+            is_ip = True
+            parsed_ip = target.network_address
+        else:
+            is_cidr = True
+            parsed_net = target
+    else:
+        # Determine from string
+        if "/" not in target_str:
+            try:
+                parsed_ip = ipaddress.ip_address(target_str)
+                is_ip = True
+            except ValueError:
+                pass
+        else:
+            try:
+                net = ipaddress.ip_network(target_str, strict=False)
+                if net.num_addresses == 1:
+                    parsed_ip = net.network_address
+                    is_ip = True
+                else:
+                    parsed_net = net
+                    is_cidr = True
+            except ValueError:
+                pass
+
+        if not is_ip and not is_cidr:
+            try:
+                parsed_ip = ipaddress.ip_address(target_str)
+                is_ip = True
+            except ValueError:
+                try:
+                    parsed_net = ipaddress.ip_network(target_str, strict=False)
+                    is_cidr = True
+                except ValueError:
+                    raise ValueError(f"'{target}' is neither a valid IP address nor a valid CIDR network.")
+
+    if is_ip:
+        candidate_nets = [n for n in networks if context is None or n.context == context]
+        matching_nets = [n for n in candidate_nets if parsed_ip in n.cidr]
+        matching_nets.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+
+        matches = []
+        for net in matching_nets:
+            info = net.get_ip_info(parsed_ip)
+            if info:
+                parent = net.get_parent_aggregate(networks)
+                info["parent_aggregate"] = f"{parent.name} ({parent.cidr})" if parent else None
+                matches.append(info)
+
+        return {
+            "target": str(parsed_ip),
+            "target_type": "ip",
+            "matches": matches,
+        }
+
+    # is_cidr
+    candidate_nets = [n for n in networks if context is None or n.context == context]
+    containing_nets = [n for n in candidate_nets if parsed_net.subnet_of(n.cidr) or parsed_net == n.cidr]
+    containing_nets.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+
+    if containing_nets:
+        is_exact = parsed_net == containing_nets[0].cidr
+        matches = []
+        for net in containing_nets:
+            info = net.get_cidr_info(parsed_net)
+            if info:
+                parent = net.get_parent_aggregate(networks)
+                info["parent_aggregate"] = f"{parent.name} ({parent.cidr})" if parent else None
+                if net.aggregate:
+                    subnets = net.get_subnets(networks)
+                    info["subnets"] = [s.to_dict for s in sorted(subnets, key=lambda s: s.cidr)]
+                    info["unallocated_subnets"] = [str(b) for b in net.get_unallocated_subnets(networks)]
+                matches.append(info)
+
+        return {
+            "target": str(parsed_net),
+            "target_type": "cidr",
+            "match_type": "exact" if is_exact else "subnet",
+            "matches": matches,
+        }
+
+    # Check if target CIDR is a supernet containing networks
+    contained = [n for n in candidate_nets if n.cidr.subnet_of(parsed_net)]
+    if contained:
+        contained_sorted = sorted(contained, key=lambda n: (n.context, n.cidr))
+        return {
+            "target": str(parsed_net),
+            "target_type": "cidr",
+            "match_type": "supernet",
+            "total_addresses": parsed_net.num_addresses,
+            "contained_networks": [n.to_dict for n in contained_sorted],
+            "matches": [],
+        }
+
+    return {
+        "target": str(parsed_net),
+        "target_type": "cidr",
+        "match_type": "none",
+        "matches": [],
+    }
+
+
+# Alias for lookup_ip_or_cidr
+lookup_target = lookup_ip_or_cidr

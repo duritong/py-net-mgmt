@@ -46,6 +46,14 @@ When adding a new topological metadata field (e.g. adding `environment` or simil
 5. **Write Unit Tests**:
    - Ensure the new attribute is covered by dedicated tests inside `tests/` (e.g., verifying parsing, saving, querying, and inheritance).
 
+
+### Query & Lookup Capability Sync
+When extending network inspection or lookup routines:
+1. **Core Abstraction**: Implement core logic inside `src/net_mgmt/core.py` (e.g., `Network.get_ip_info`, `lookup_ip_or_cidr`).
+2. **CLI Integration**: Expose commands in `src/net_mgmt/cli.py` (e.g., `lookup` command, `show ip`, `show cidr`) supporting `table`, `json`, and `csv` formats.
+3. **Jinja2 Filters**: Synchronize filters inside `src/net_mgmt/jinja.py` (e.g. `lookup_target`, `network_containing_ip`, `network_containing_cidr`, `ip_info`, `cidr_info`) so automation templates have 1:1 parity with CLI capabilities.
+4. **Programmatic API**: Export top-level helpers in `src/net_mgmt/__init__.py` and `src/net_mgmt/db.py`.
+5. **Unit Tests**: Ensure tests cover single IPs, subnets, supernets, multiple contexts, and error conditions.
 ---
 
 ## 3. Code Quality & Formatting

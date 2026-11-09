@@ -84,12 +84,12 @@ net-mgmt list networks -f csv
 Displays full structured details for a specific network or hierarchical entity (metadata fields, timeservers, static routes, reservations, allocations, and statistics). Supports structured format exports.
 
 #### Arguments & Aliases
-* `LEVEL` *(Required)*: The hierarchical level of the entity to show. Same abbreviations/aliases as `list` command are accepted.
+* `LEVEL` *(Required)*: The hierarchical level of the entity to show. Same abbreviations/aliases as `list` command are accepted, plus `ip` and `cidr` for target lookups.
 * `NAME` *(Required)*: The name of the specific entity to show.
 
 #### Options
+* `--context`, `-c`: Optional network context filter.
 * `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
-
 ```bash
 # Show detailed tables of a network
 net-mgmt show networks backend_net
@@ -103,6 +103,53 @@ net-mgmt show networks backend_net --format json
 # Show network allocations and pools as standard CSV rows
 net-mgmt show networks backend_net -f csv
 ```
+
+---
+
+### Command: `lookup`
+Inspects an IP address or CIDR network and displays rich metadata about the network it belongs to, its allocation status, and its containing reservations.
+
+#### Arguments
+* `TARGET` *(Required)*: The IPv4/IPv6 address (e.g. `10.0.1.15`, `2001:db8::1`) or CIDR network/subnet (e.g. `10.0.1.0/24`, `10.0.1.16/28`) to look up.
+
+#### Options
+* `--context`, `-c`: Filter the lookup to a specific network context (useful when different isolated contexts define overlapping CIDR spaces).
+* `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
+* `--path`: Override the path to the networks directory (defaults to `networks` or `$NET_MGMT_PATH`).
+
+#### Lookup Behavior
+* **IP Address Target**:
+  - Discovers the matching network (using longest prefix match, preferring child subnets over aggregate supernets).
+  - Displays network metadata (Name, CIDR, Context, VLAN, Environment, Datacenter, Zone, Bridge Domain, EPG, Gateway, MTU, DNS, Timeservers, Description, and Parent Aggregate).
+  - Determines status:
+    - **`Allocated`**: Displays matching hostname, comment, and allocation type (single IP, range, or subnet).
+    - **`Available`**: When the IP falls within an allocatable reservation pool and is currently unassigned.
+    - **`Reserved`**: When the IP belongs to a non-allocatable reservation (such as static infrastructure or system gateway/internal reservations).
+    - **`Unreserved / Free`**: When the IP is completely unreserved and unallocated within the network prefix.
+* **CIDR Subnet / Network Target**:
+  - **Exact Match**: When the CIDR matches an existing network, full network details, child subnets, reservations, allocations, and unreserved blocks are displayed.
+  - **Subnet Match**: When the CIDR is a subnet of an existing network, displays the parent network, total address count, overlapping reservations, contained allocations, and free blocks within that subnet.
+  - **Supernet Match**: When the CIDR encompasses multiple defined networks, displays all contained networks and total capacity.
+
+```bash
+# Lookup an IP address in table format
+net-mgmt lookup 10.100.1.55
+
+# Lookup an IP address formatted as structured JSON
+net-mgmt lookup 10.100.1.55 --format json
+
+# Lookup an IP address filtered by a specific context
+net-mgmt lookup 10.100.1.55 --context dmz
+
+# Lookup a subnet CIDR within a larger network
+net-mgmt lookup 10.100.1.16/28
+
+# Lookup a supernet CIDR encompassing multiple networks
+net-mgmt lookup 10.0.0.0/8
+
+# Equivalent show invocation
+net-mgmt show ip 10.100.1.55
+net-mgmt show cidr 10.100.1.0/24
 
 ---
 
@@ -306,6 +353,33 @@ Networks support standard optional configuration keys in their YAML database fil
 - `reserve_internal` (`bool`, defaults to `true`): If `true`, reserves the internal system host IPs starting from `.2` as `sys-internal`.
 - `reserve_internal_until` (`int`, defaults to `6`): Configures the dynamic upper boundary (offset from the network base address) for the internal reserved range. For example, setting this to `5` will reserve `.2` up to `.5`, while setting this to `10` will reserve `.2` up to `.10`.
 
+
+### IP & CIDR Lookup API
+```python
+from net_mgmt import get_network_for_cidr, get_network_for_ip, lookup
+from net_mgmt.core import find_network_for_ip, find_networks_for_cidr, lookup_ip_or_cidr
+
+# 1. Look up an IP address across the database
+result = lookup("10.100.1.55")
+print(result["target_type"])  # "ip"
+print(result["matches"][0]["status"])  # "allocated"
+print(result["matches"][0]["allocation"]["hostname"])  # "web-srv01.corp.local"
+
+# 2. Directly find containing Network object for an IP
+network = get_network_for_ip("10.100.1.55")
+print(network.name)  # "corp_web"
+
+# 3. Retrieve IP allocation/reservation metadata directly from a Network model
+ip_info = network.get_ip_info("10.100.1.55")
+print(ip_info["status"])  # "allocated", "available", "reserved", or "unreserved"
+
+# 4. Directly find containing Network object for a CIDR
+parent_net = get_network_for_cidr("10.100.1.16/28")
+
+# 5. Retrieve CIDR subnet details directly from a Network model
+cidr_info = network.get_cidr_info("10.100.1.16/28")
+print(cidr_info["num_addresses"])  # 16
+```
 ---
 
 ## 3. Jinja2 Filters Integration
@@ -394,8 +468,8 @@ Retrieves all subnets/networks associated with a specific Bridge Domain name:
 {% endfor %}
 ```
 
-#### Filter: `network_containing_ip`
-Finds the parent `Network` object containing a given IP address (either a string IP, or an IP/CIDR object):
+#### Filter: `network_containing_ip` & `network_containing_cidr`
+Finds the parent `Network` object containing a given IP address or CIDR network prefix (supports string IP, CIDR, or ipaddress objects):
 ```jinja
 {# 1. Find the parent network containing a standalone allocation IP #}
 {% set parent_net = alloc.ip | network_containing_ip %}
@@ -403,6 +477,28 @@ Finds the parent `Network` object containing a given IP address (either a string
 {# 2. Read the prefix length #}
 Parent Prefix: {{ parent_net.cidr.prefixlen }}
 Parent Subnet: {{ parent_net.cidr }}
+
+{# 3. Find parent network containing a CIDR subnet #}
+{% set net = '10.100.1.0/24' | network_containing_cidr %}
+```
+
+#### Filter: `lookup_target`
+Performs a comprehensive lookup for an IP or CIDR across the network database, returning structured details (allocation, reservation, status, and network coordinates):
+```jinja
+{% set info = '10.100.1.55' | lookup_target %}
+Status: {{ info.matches[0].status }}
+Hostname: {{ info.matches[0].allocation.hostname }}
+Reservation: {{ info.matches[0].reservation.id }}
+```
+
+#### Filter: `ip_info` & `cidr_info`
+Inspects an IP address or CIDR subnet directly on a `Network` instance:
+```jinja
+{% set ip_status = network | ip_info('10.100.1.55') %}
+IP Status: {{ ip_status.status }}
+
+{% set subnet_stats = network | cidr_info('10.100.1.16/28') %}
+Subnet Addresses: {{ subnet_stats.num_addresses }}
 ```
 
 #### Relational Metadata Lookups: `*_by_name`

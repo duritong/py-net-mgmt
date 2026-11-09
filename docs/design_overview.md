@@ -161,3 +161,24 @@ The database enforces a series of strict structural and logical constraints:
    - **VLAN/BridgeDomain/Environment Match**: If a network explicitly defines any of these attributes, they must not conflict with the linked EPG's properties.
    - **Bridge Domain without EPG constraint**: A network cannot define `bridge_domain` without linking to an EPG.
    - **Datacenter/Zone Match**: Network's defined or inherited DC/Zone must match its EPG's BridgeDomain DC/Zone.
+
+---
+
+## 6. IP & CIDR Lookup Architecture
+
+`net-mgmt` provides a unified lookup engine to inspect any IPv4/IPv6 address or CIDR network prefix across the database.
+
+### 6.1. Target Detection & Normalization
+The engine automatically parses and detects whether the supplied target is a single IP address (e.g. `10.0.1.15`, `2001:db8::1`, `/32`, `/128`) or a CIDR network block (e.g. `10.0.1.0/24`, `10.0.1.16/28`).
+
+### 6.2. Network Matching & Longest Prefix Match
+* **IP Address Matching**: Networks containing the target IP (`ip in net.cidr`) are sorted by prefix length descending (`(net.cidr.prefixlen, not net.aggregate)`), ensuring the most specific child subnet is selected over containing aggregate supernets.
+* **CIDR Subnet Matching**: Evaluates whether the target CIDR is an exact match for a network, a subnet contained within a network, or a supernet encompassing multiple defined networks.
+* **Context Isolation**: When `--context` is specified, candidate networks are restricted to that context. When omitted, all matching networks across contexts are evaluated.
+
+### 6.3. Status & Allocation Resolution
+For an IP address, the lookup engine computes its exact operational state:
+1. **`Allocated`**: Matches against single-host allocations (`alloc.ip == target_ip`) or covering subnet/range allocations (`target_ip in alloc_net`).
+2. **`Available`**: When the IP resides inside an allocatable reservation (`allocatable: true`) and is not currently allocated.
+3. **`Reserved`**: When the IP resides inside a non-allocatable reservation (`allocatable: false`), including system reservations (`sys-gateway`, `sys-network`, `sys-broadcast`, `sys-internal`).
+4. **`Unreserved`**: When the IP resides in unreserved network address space.

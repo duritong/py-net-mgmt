@@ -1,6 +1,7 @@
 import builtins
 import ipaddress
 import os
+from typing import Optional
 
 import click
 from rich.console import Console
@@ -335,6 +336,385 @@ def list(
     console.print(table)
 
 
+def run_lookup(target: str, path: str = "networks", context: Optional[str] = None, format: str = "table"):
+    """Perform IP/CIDR lookup and render output in specified format."""
+    set_db_path(path)
+    try:
+        networks = get_database()
+    except ValueError as e:
+        click.echo(f"Validation Error: {e}")
+        exit(1)
+
+    from .core import lookup_ip_or_cidr
+
+    try:
+        result = lookup_ip_or_cidr(target, networks, context=context)
+    except ValueError as e:
+        click.echo(f"Error: {e}")
+        exit(1)
+
+    target_type = result.get("target_type")
+    if target_type == "ip":
+        if not result.get("matches"):
+            click.echo(f"Error: No network found containing IP '{target}'.")
+            exit(1)
+    elif target_type == "cidr":
+        if result.get("match_type") == "none":
+            click.echo(f"Error: No network found matching CIDR '{target}'.")
+            exit(1)
+        elif result.get("match_type") in ("exact", "subnet") and not result.get("matches"):
+            click.echo(f"Error: No network found matching CIDR '{target}'.")
+            exit(1)
+
+    if format == "json":
+        import json
+
+        click.echo(json.dumps(result, indent=2))
+        return
+
+    if format == "csv":
+        import csv
+        import sys
+
+        writer = csv.writer(sys.stdout)
+        if target_type == "ip":
+            writer.writerow(
+                [
+                    "Target",
+                    "Type",
+                    "Network",
+                    "Network_CIDR",
+                    "Context",
+                    "Status",
+                    "VLAN",
+                    "Environment",
+                    "Datacenter",
+                    "Zone",
+                    "Bridge_Domain",
+                    "EPG",
+                    "Default_Gateway",
+                    "Allocation_Host",
+                    "Allocation_Comment",
+                    "Reservation_ID",
+                    "Reservation_Comment",
+                ]
+            )
+            for m in result.get("matches", []):
+                alloc = m.get("allocation") or {}
+                res = m.get("reservation") or {}
+                writer.writerow(
+                    [
+                        result.get("target"),
+                        "ip",
+                        m.get("network"),
+                        m.get("network_cidr"),
+                        m.get("context") or "default",
+                        m.get("status"),
+                        str(m.get("vlan")) if m.get("vlan") is not None else "",
+                        m.get("environment") or "",
+                        m.get("datacenter") or "",
+                        m.get("zone") or "",
+                        m.get("bridge_domain") or "",
+                        m.get("epg") or "",
+                        m.get("gateway") or "",
+                        alloc.get("hostname") or "",
+                        alloc.get("comment") or "",
+                        res.get("id") or "",
+                        res.get("comment") or "",
+                    ]
+                )
+        else:
+            match_type = result.get("match_type")
+            if match_type in ("exact", "subnet"):
+                writer.writerow(
+                    [
+                        "Target",
+                        "Type",
+                        "Match_Type",
+                        "Network",
+                        "Network_CIDR",
+                        "Context",
+                        "Total_Addresses",
+                        "VLAN",
+                        "Environment",
+                        "Datacenter",
+                        "Zone",
+                        "Bridge_Domain",
+                        "EPG",
+                        "Description",
+                    ]
+                )
+                for m in result.get("matches", []):
+                    writer.writerow(
+                        [
+                            result.get("target"),
+                            "cidr",
+                            match_type,
+                            m.get("network"),
+                            m.get("network_cidr"),
+                            m.get("context") or "default",
+                            m.get("num_addresses"),
+                            str(m.get("vlan")) if m.get("vlan") is not None else "",
+                            m.get("environment") or "",
+                            m.get("datacenter") or "",
+                            m.get("zone") or "",
+                            m.get("bridge_domain") or "",
+                            m.get("epg") or "",
+                            m.get("description") or "",
+                        ]
+                    )
+            elif match_type == "supernet":
+                writer.writerow(
+                    [
+                        "Target",
+                        "Type",
+                        "Match_Type",
+                        "Contained_Network",
+                        "Contained_CIDR",
+                        "Context",
+                        "VLAN",
+                        "Environment",
+                        "Datacenter",
+                        "Zone",
+                        "Bridge_Domain",
+                        "EPG",
+                    ]
+                )
+                for net in result.get("contained_networks", []):
+                    writer.writerow(
+                        [
+                            result.get("target"),
+                            "cidr",
+                            "supernet",
+                            net.get("name"),
+                            str(net.get("cidr")),
+                            net.get("context") or "default",
+                            str(net.get("vlan")) if net.get("vlan") is not None else "",
+                            net.get("environment") or "",
+                            net.get("datacenter") or "",
+                            net.get("zone") or "",
+                            net.get("bridge_domain") or "",
+                            net.get("epg") or "",
+                        ]
+                    )
+        return
+
+    # Rich Table Console output
+    import sys
+
+    import rich.box
+
+    width = 9999 if not sys.stdout.isatty() else None
+    console = Console(width=width)
+
+    if target_type == "ip":
+        for i, match in enumerate(result.get("matches", [])):
+            if i > 0:
+                console.print("\n" + "=" * 50 + "\n")
+            console.print(f"[bold cyan]Target:[/bold cyan] {result.get('target')} (IP Address)")
+            console.print(f"[bold cyan]Network:[/bold cyan] {match.get('network')} ({match.get('network_cidr')})")
+            console.print(f"[bold cyan]Context:[/bold cyan] {match.get('context') or 'default'}")
+
+            status_raw = match.get("status", "unreserved")
+            if status_raw == "allocated":
+                styled_status = "[bold green]Allocated[/bold green]"
+            elif status_raw == "available":
+                styled_status = "[bold cyan]Available[/bold cyan]"
+            elif status_raw == "reserved":
+                styled_status = "[bold yellow]Reserved[/bold yellow]"
+            else:
+                styled_status = "[bold blue]Unreserved / Free[/bold blue]"
+            console.print(f"[bold cyan]Status:[/bold cyan] {styled_status}")
+
+            console.print(f"[bold cyan]Description:[/bold cyan] {match.get('description') or 'None'}")
+            console.print(
+                f"[bold cyan]VLAN:[/bold cyan] {match.get('vlan') if match.get('vlan') is not None else 'None'}"
+            )
+            console.print(f"[bold cyan]Bridge Domain:[/bold cyan] {match.get('bridge_domain') or 'None'}")
+            console.print(f"[bold cyan]Environment:[/bold cyan] {match.get('environment') or 'None'}")
+            console.print(f"[bold cyan]EPG:[/bold cyan] {match.get('epg') or 'None'}")
+            console.print(f"[bold cyan]Zone:[/bold cyan] {match.get('zone') or 'None'}")
+            console.print(f"[bold cyan]Datacenter:[/bold cyan] {match.get('datacenter') or 'None'}")
+            console.print(f"[bold cyan]Default Gateway:[/bold cyan] {match.get('gateway') or 'None'}")
+            mtu_str = match.get("default_mtu") if match.get("default_mtu") is not None else "None"
+            console.print(f"[bold cyan]Default MTU:[/bold cyan] {mtu_str}")
+
+            dns_ns = ", ".join(match.get("dns_nameservers", [])) if match.get("dns_nameservers") else "None"
+            console.print(f"[bold cyan]DNS Nameservers:[/bold cyan] {dns_ns}")
+
+            dns_search = ", ".join(match.get("dns_search", [])) if match.get("dns_search") else "None"
+            console.print(f"[bold cyan]DNS Search:[/bold cyan] {dns_search}")
+
+            timeservers = ", ".join(match.get("timeservers", [])) if match.get("timeservers") else "None"
+            console.print(f"[bold cyan]Timeservers:[/bold cyan] {timeservers}")
+
+            console.print(f"[bold cyan]Routable:[/bold cyan] {match.get('routable')}")
+            if match.get("parent_aggregate"):
+                console.print(f"[bold cyan]Parent Aggregate:[/bold cyan] {match.get('parent_aggregate')}")
+
+            # Allocation details
+            if match.get("allocation"):
+                alloc = match["allocation"]
+                console.print("\n[bold yellow]Allocation:[/bold yellow]")
+                if alloc.get("hostname"):
+                    console.print(f"  [bold cyan]Hostname:[/bold cyan] {alloc['hostname']}")
+                if alloc.get("comment"):
+                    console.print(f"  [bold cyan]Comment:[/bold cyan] {alloc['comment']}")
+                alloc_type_desc = (
+                    "Single IP" if alloc.get("type") == "single" else f"Subnet/Range ({alloc.get('cidr', '')})"
+                )
+                console.print(f"  [bold cyan]Type:[/bold cyan] {alloc_type_desc}")
+            else:
+                console.print("\n[bold yellow]Allocation:[/bold yellow] None")
+
+            # Reservation details
+            if match.get("reservation"):
+                res = match["reservation"]
+                console.print("\n[bold yellow]Reservation:[/bold yellow]")
+                console.print(f"  [bold cyan]ID:[/bold cyan] {res.get('id')}")
+                console.print(f"  [bold cyan]Definition:[/bold cyan] {res.get('cidr')}")
+                console.print(f"  [bold cyan]Comment:[/bold cyan] {res.get('comment') or 'None'}")
+                console.print(f"  [bold cyan]Allocatable:[/bold cyan] {res.get('allocatable', False)}")
+            else:
+                console.print("\n[bold yellow]Reservation:[/bold yellow] None (Unreserved range)")
+
+    elif target_type == "cidr":
+        match_type = result.get("match_type")
+        if match_type in ("exact", "subnet"):
+            for i, match in enumerate(result.get("matches", [])):
+                if i > 0:
+                    console.print("\n" + "=" * 50 + "\n")
+                console.print(f"[bold cyan]Target:[/bold cyan] {result.get('target')} (CIDR Network)")
+                match_desc = (
+                    "Exact Network Match"
+                    if match.get("is_exact_network")
+                    else f"Subnet of Network {match.get('network')} ({match.get('network_cidr')})"
+                )
+                console.print(f"[bold cyan]Match Type:[/bold cyan] {match_desc}")
+                console.print(f"[bold cyan]Network:[/bold cyan] {match.get('network')} ({match.get('network_cidr')})")
+                console.print(f"[bold cyan]Context:[/bold cyan] {match.get('context') or 'default'}")
+                console.print(f"[bold cyan]Total Addresses:[/bold cyan] {match.get('num_addresses')}")
+                console.print(f"[bold cyan]Network Address:[/bold cyan] {match.get('network_address')}")
+                if match.get("broadcast_address"):
+                    console.print(f"[bold cyan]Broadcast Address:[/bold cyan] {match.get('broadcast_address')}")
+                console.print(
+                    f"[bold cyan]VLAN:[/bold cyan] {match.get('vlan') if match.get('vlan') is not None else 'None'}"
+                )
+                console.print(f"[bold cyan]Bridge Domain:[/bold cyan] {match.get('bridge_domain') or 'None'}")
+                console.print(f"[bold cyan]Environment:[/bold cyan] {match.get('environment') or 'None'}")
+                console.print(f"[bold cyan]EPG:[/bold cyan] {match.get('epg') or 'None'}")
+                console.print(f"[bold cyan]Zone:[/bold cyan] {match.get('zone') or 'None'}")
+                console.print(f"[bold cyan]Datacenter:[/bold cyan] {match.get('datacenter') or 'None'}")
+                console.print(f"[bold cyan]Default Gateway:[/bold cyan] {match.get('gateway') or 'None'}")
+                mtu_str = match.get("default_mtu") if match.get("default_mtu") is not None else "None"
+                console.print(f"[bold cyan]Default MTU:[/bold cyan] {mtu_str}")
+                dns_ns = ", ".join(match.get("dns_nameservers", [])) if match.get("dns_nameservers") else "None"
+                console.print(f"[bold cyan]DNS Nameservers:[/bold cyan] {dns_ns}")
+                dns_search = ", ".join(match.get("dns_search", [])) if match.get("dns_search") else "None"
+                console.print(f"[bold cyan]DNS Search:[/bold cyan] {dns_search}")
+                timeservers = ", ".join(match.get("timeservers", [])) if match.get("timeservers") else "None"
+                console.print(f"[bold cyan]Timeservers:[/bold cyan] {timeservers}")
+                console.print(f"[bold cyan]Description:[/bold cyan] {match.get('description') or 'None'}")
+                console.print(f"[bold cyan]Routable:[/bold cyan] {match.get('routable')}")
+                if match.get("parent_aggregate"):
+                    console.print(f"[bold cyan]Parent Aggregate:[/bold cyan] {match.get('parent_aggregate')}")
+
+                # Subnets if aggregate
+                if match.get("subnets"):
+                    console.print("\n[bold yellow]Sub-Prefixes (Subnets):[/bold yellow]")
+                    sub_table = Table(box=rich.box.SIMPLE)
+                    sub_table.add_column("Subnet", style="cyan")
+                    sub_table.add_column("CIDR", style="green")
+                    sub_table.add_column("EPG", style="magenta")
+                    sub_table.add_column("VLAN", justify="right")
+                    sub_table.add_column("Description")
+                    for s in match["subnets"]:
+                        sub_table.add_row(
+                            s.get("name", ""),
+                            str(s.get("cidr", "")),
+                            s.get("epg") or "None",
+                            str(s.get("vlan")) if s.get("vlan") is not None else "None",
+                            s.get("description") or "",
+                        )
+                    console.print(sub_table)
+
+                if match.get("unallocated_subnets"):
+                    console.print("\n[bold yellow]Available Sub-Prefix Capacity:[/bold yellow]")
+                    for b in match["unallocated_subnets"]:
+                        console.print(f"  - [green]{b}[/green]")
+
+                # Reservations
+                if match.get("reservations"):
+                    console.print("\n[bold yellow]Reservations:[/bold yellow]")
+                    res_table = Table(box=rich.box.SIMPLE)
+                    res_table.add_column("ID", style="cyan")
+                    res_table.add_column("CIDR", style="green")
+                    res_table.add_column("Comment")
+                    res_table.add_column("Allocatable", justify="center")
+                    for r in match["reservations"]:
+                        res_table.add_row(
+                            r.get("id", ""),
+                            str(r.get("cidr", "")),
+                            r.get("comment") or "",
+                            str(r.get("allocatable", False)),
+                        )
+                    console.print(res_table)
+                else:
+                    console.print("\n[bold yellow]Reservations:[/bold yellow] None")
+
+                # Allocations
+                if match.get("allocations"):
+                    console.print("\n[bold yellow]Allocations:[/bold yellow]")
+                    alloc_table = Table(box=rich.box.SIMPLE)
+                    alloc_table.add_column("IP/CIDR", style="green")
+                    alloc_table.add_column("Hostname/Comment")
+                    for a in match["allocations"]:
+                        ident = a.get("hostname") or a.get("comment") or ""
+                        addr = a.get("ip") or a.get("cidr") or ""
+                        alloc_table.add_row(str(addr), ident)
+                    console.print(alloc_table)
+                else:
+                    console.print("\n[bold yellow]Allocations:[/bold yellow] None")
+
+                # Unreserved
+                if match.get("unreserved_ranges"):
+                    console.print("\n[bold yellow]Unreserved Ranges:[/bold yellow]")
+                    for rng in match["unreserved_ranges"]:
+                        console.print(f"  [green]{rng}[/green]")
+
+        elif match_type == "supernet":
+            console.print(f"[bold cyan]Target:[/bold cyan] {result.get('target')} (CIDR Supernet)")
+            count = len(result.get("contained_networks", []))
+            console.print(f"[bold cyan]Match Type:[/bold cyan] Supernet Containing {count} Network(s)")
+            console.print(f"[bold cyan]Total Capacity:[/bold cyan] {result.get('total_addresses')} addresses")
+            console.print("\n[bold yellow]Contained Networks:[/bold yellow]")
+            table = Table(box=rich.box.SIMPLE)
+            table.add_column("Name", style="cyan")
+            table.add_column("CIDR", style="green")
+            table.add_column("Context")
+            table.add_column("VLAN", justify="right")
+            table.add_column("Environment")
+            table.add_column("Datacenter")
+            table.add_column("Zone")
+            table.add_column("Bridge Domain")
+            table.add_column("EPG")
+            table.add_column("Description")
+            for n in result.get("contained_networks", []):
+                table.add_row(
+                    n.get("name", ""),
+                    str(n.get("cidr", "")),
+                    n.get("context") or "default",
+                    str(n.get("vlan")) if n.get("vlan") is not None else "None",
+                    n.get("environment") or "",
+                    n.get("datacenter") or "",
+                    n.get("zone") or "",
+                    n.get("bridge_domain") or "",
+                    n.get("epg") or "",
+                    n.get("description") or "",
+                )
+            console.print(table)
+
+
 @cli.command()
 @click.argument("level", type=str)
 @click.argument("name", type=str)
@@ -346,7 +726,8 @@ def list(
     help="Output format (table, csv, json)",
 )
 @click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
-def show(level, name, format, path):
+@click.option("--context", "-c", default=None, help="Filter by network context")
+def show(level, name, format, path, context=None):
     """Show details of a specific network or hierarchical entity"""
     alias_map = {
         "networks": "networks",
@@ -373,8 +754,9 @@ def show(level, name, format, path):
         "env": "environments",
         "epgs": "epgs",
         "epg": "epgs",
+        "ip": "ip",
+        "cidr": "cidr",
     }
-
     normalized_level = alias_map.get(level.lower())
     if not normalized_level:
         click.echo(f"Error: Unknown hierarchical level '{level}'.")
@@ -386,6 +768,10 @@ def show(level, name, format, path):
     except ValueError as e:
         click.echo(f"Validation Error: {e}")
         exit(1)
+
+    if normalized_level in ("ip", "cidr"):
+        run_lookup(name, path=path, context=context, format=format)
+        return
 
     if normalized_level != "networks":
         from .db import get_cached_entities
@@ -605,6 +991,22 @@ def show(level, name, format, path):
         console.print("\n[bold yellow]Unreserved Ranges:[/bold yellow]")
         for rng in unreserved:
             console.print(f"  [green]{rng}[/green]")
+
+
+@cli.command("lookup")
+@click.argument("target", type=str)
+@click.option("--path", envvar="NET_MGMT_PATH", default="networks", help="Path to networks directory")
+@click.option("--context", "-c", default=None, help="Filter lookup to a specific network context")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["table", "csv", "json"]),
+    default="table",
+    help="Output format (table, csv, json)",
+)
+def lookup(target, path, context, format):
+    """Lookup an IP address or CIDR network and display containing network, status, and reservations"""
+    run_lookup(target, path=path, context=context, format=format)
 
 
 @cli.command()

@@ -1,7 +1,7 @@
 import os
 from typing import List, Optional
 
-from .core import Network, validate_network_list
+from .core import Network, find_network_for_ip, find_networks_for_cidr, lookup_ip_or_cidr, validate_network_list
 from .loader import load_all_networks, load_yaml_files_from_subdir
 
 _DB_CACHE: Optional[List[Network]] = None
@@ -84,3 +84,19 @@ def get_database(force_reload: bool = False) -> List[Network]:
         validate_network_list(networks)
         _DB_CACHE = networks
     return _DB_CACHE
+
+
+def lookup(target: str, context: Optional[str] = None) -> dict:
+    """Perform a comprehensive lookup for an IP or CIDR across the database."""
+    return lookup_ip_or_cidr(target, get_database(), context=context)
+
+
+def get_network_for_ip(ip: str, context: Optional[str] = None) -> Optional[Network]:
+    """Retrieve the containing network for a given IP address."""
+    return find_network_for_ip(ip, get_database(), context=context)
+
+
+def get_network_for_cidr(cidr: str, context: Optional[str] = None) -> Optional[Network]:
+    """Retrieve the containing network for a given CIDR network."""
+    nets = find_networks_for_cidr(cidr, get_database(), context=context)
+    return nets[0] if nets else None

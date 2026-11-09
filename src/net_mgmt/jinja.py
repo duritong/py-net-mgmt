@@ -2,7 +2,7 @@ import ipaddress
 import os
 from typing import Any, List, Optional
 
-from .core import Allocation, Network
+from .core import Allocation, Network, find_network_for_ip, find_networks_for_cidr, lookup_ip_or_cidr
 from .core import query_networks as core_query_networks
 from .db import get_database
 
@@ -247,10 +247,12 @@ def datacenter_by_name(value: Any, name: Optional[str] = None) -> Optional[Relat
 
 
 def network_containing_ip(value: Any, ip_str: Optional[str] = None) -> Optional[Network]:
-    """Find the Network object containing a given IP address.
+    """Find the Network object containing a given IP address or CIDR.
     Usage:
         networks | network_containing_ip('10.0.1.10')
         '10.0.1.10' | network_containing_ip
+        networks | network_containing_ip('10.0.1.0/24')
+        '10.0.1.0/24' | network_containing_ip
     """
     if ip_str is None:
         ip_str = value
@@ -258,17 +260,69 @@ def network_containing_ip(value: Any, ip_str: Optional[str] = None) -> Optional[
     else:
         networks = _ensure_networks(value)
 
+    if not ip_str:
+        return None
+
+    target_str = str(ip_str).strip()
+    # Try parsing as IP address first
+    if "/" not in target_str or target_str.endswith("/32") or target_str.endswith("/128"):
+        try:
+            target_ip = ipaddress.ip_address(target_str.split("/")[0])
+            return find_network_for_ip(target_ip, networks)
+        except ValueError:
+            pass
+
+    # Try parsing as CIDR network
     try:
-        target_ip = ipaddress.ip_address(str(ip_str))
+        target_net = ipaddress.ip_network(target_str, strict=False)
+        nets = find_networks_for_cidr(target_net, networks)
+        return nets[0] if nets else None
     except ValueError:
         return None
 
-    matching = [net for net in networks if target_ip in net.cidr]
-    if not matching:
-        return None
-    # Longest prefix match: highest prefixlen first; if prefixlen is equal, prefer non-aggregate
-    matching.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
-    return matching[0]
+
+def network_containing_cidr(value: Any, cidr_str: Optional[str] = None) -> Optional[Network]:
+    """Find the Network object containing a given CIDR network.
+    Usage:
+        networks | network_containing_cidr('10.0.1.0/24')
+        '10.0.1.0/24' | network_containing_cidr
+    """
+    return network_containing_ip(value, cidr_str)
+
+
+def lookup_target(value: Any, target: Optional[str] = None, context: Optional[str] = None) -> dict:
+    """Perform a comprehensive lookup for an IP or CIDR target across networks.
+    Usage:
+        networks | lookup_target('10.0.1.10')
+        '10.0.1.10' | lookup_target
+    """
+    if target is None:
+        target = value
+        networks = get_database()
+    else:
+        networks = _ensure_networks(value)
+
+    return lookup_ip_or_cidr(str(target), networks, context=context)
+
+
+def ip_info(value: Any, ip_str: Optional[str] = None) -> Optional[dict]:
+    """Retrieve detailed IP allocation, reservation, and status information from a Network.
+    Usage:
+        network | ip_info('10.0.1.10')
+    """
+    if isinstance(value, Network) and ip_str:
+        return value.get_ip_info(ip_str)
+    return None
+
+
+def cidr_info(value: Any, cidr_str: Optional[str] = None) -> Optional[dict]:
+    """Retrieve detailed CIDR subnet information from a Network.
+    Usage:
+        network | cidr_info('10.0.1.16/28')
+    """
+    if isinstance(value, Network) and cidr_str:
+        return value.get_cidr_info(cidr_str)
+    return None
 
 
 def query_networks(value: Any, filters: Optional[dict] = None, **kwargs) -> List[Network]:
@@ -321,6 +375,10 @@ def register_filters(env):
     env.filters["zone_by_name"] = zone_by_name
     env.filters["datacenter_by_name"] = datacenter_by_name
     env.filters["network_containing_ip"] = network_containing_ip
+    env.filters["network_containing_cidr"] = network_containing_cidr
+    env.filters["lookup_target"] = lookup_target
+    env.filters["ip_info"] = ip_info
+    env.filters["cidr_info"] = cidr_info
     env.filters["query_networks"] = query_networks
     env.filters["apply_reservation_template"] = jinja_apply_reservation_template
     env.filters["get_networks"] = get_database  # Keep for compatibility if needed, but globals is better
