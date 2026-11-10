@@ -101,7 +101,7 @@ def load_all_networks(directory: str) -> List[Network]:
     epgs = load_yaml_files_from_subdir(db_dir, "epgs")
 
     networks = []
-    for file in os.listdir(net_dir):
+    for file in sorted(os.listdir(net_dir)):
         if file.lower().endswith(".yaml"):  # Enforce standard .yaml extension!
             file_path = os.path.join(net_dir, file)
             try:

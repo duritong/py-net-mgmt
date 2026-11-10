@@ -1256,7 +1256,16 @@ def find_network_for_ip(
     if not matching:
         return None
 
-    matching.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+    matching.sort(key=lambda n: n.name)
+    matching.sort(
+        key=lambda n: (
+            n.cidr.prefixlen,
+            not n.aggregate,
+            n.context == "default",
+            n.routable,
+        ),
+        reverse=True,
+    )
     return matching[0]
 
 
@@ -1273,7 +1282,16 @@ def find_networks_for_cidr(
 
     candidate_nets = [n for n in networks if context is None or n.context == context]
     matching = [n for n in candidate_nets if target_net.subnet_of(n.cidr) or target_net == n.cidr]
-    matching.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+    matching.sort(key=lambda n: n.name)
+    matching.sort(
+        key=lambda n: (
+            n.cidr.prefixlen,
+            not n.aggregate,
+            n.context == "default",
+            n.routable,
+        ),
+        reverse=True,
+    )
     return matching
 
 
@@ -1336,7 +1354,16 @@ def lookup_ip_or_cidr(
     if is_ip:
         candidate_nets = [n for n in networks if context is None or n.context == context]
         matching_nets = [n for n in candidate_nets if parsed_ip in n.cidr]
-        matching_nets.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+        matching_nets.sort(key=lambda n: n.name)
+        matching_nets.sort(
+            key=lambda n: (
+                n.cidr.prefixlen,
+                not n.aggregate,
+                n.context == "default",
+                n.routable,
+            ),
+            reverse=True,
+        )
 
         matches = []
         for net in matching_nets:
@@ -1355,7 +1382,16 @@ def lookup_ip_or_cidr(
     # is_cidr
     candidate_nets = [n for n in networks if context is None or n.context == context]
     containing_nets = [n for n in candidate_nets if parsed_net.subnet_of(n.cidr) or parsed_net == n.cidr]
-    containing_nets.sort(key=lambda n: (n.cidr.prefixlen, not n.aggregate), reverse=True)
+    containing_nets.sort(key=lambda n: n.name)
+    containing_nets.sort(
+        key=lambda n: (
+            n.cidr.prefixlen,
+            not n.aggregate,
+            n.context == "default",
+            n.routable,
+        ),
+        reverse=True,
+    )
 
     if containing_nets:
         is_exact = parsed_net == containing_nets[0].cidr
