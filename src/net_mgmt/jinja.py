@@ -359,6 +359,29 @@ def jinja_apply_reservation_template(value: Any, template_path: str) -> dict:
     return value.apply_reservation_template(template_data)
 
 
+def dual_stack_peer(value: Any, all_networks: Optional[List[Network]] = None) -> Optional[Network]:
+    """Retrieve the corresponding dual-stack peer network (IPv4 <-> IPv6) under the same EPG or Bridge Domain.
+    Usage:
+        network | dual_stack_peer
+        network | dual_stack_peer(networks)
+    """
+    if not isinstance(value, Network):
+        return None
+    nets = _ensure_networks(all_networks)
+    return value.get_dual_stack_peer(nets)
+
+
+def networks_by_ip_version(value: Any, version: int = 4) -> List[Network]:
+    """Filter networks by IP version (4 or 6).
+    Usage:
+        networks | networks_by_ip_version(6)
+        get_networks() | networks_by_ip_version(4)
+    """
+    networks = _ensure_networks(value)
+    target_ver = 6 if str(version).lstrip("v") == "6" else 4
+    return [n for n in networks if n.cidr.version == target_ver]
+
+
 def register_filters(env):
     """Register filters to a Jinja2 environment."""
     env.filters["network_by_name"] = network_by_name
@@ -381,5 +404,7 @@ def register_filters(env):
     env.filters["cidr_info"] = cidr_info
     env.filters["query_networks"] = query_networks
     env.filters["apply_reservation_template"] = jinja_apply_reservation_template
+    env.filters["dual_stack_peer"] = dual_stack_peer
+    env.filters["networks_by_ip_version"] = networks_by_ip_version
     env.filters["get_networks"] = get_database  # Keep for compatibility if needed, but globals is better
     env.globals["get_networks"] = get_database

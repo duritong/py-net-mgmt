@@ -22,7 +22,7 @@ def build_overview_table_rows(
     aggregate_subnets = {}
     all_child_subnet_names = set()
     for agg in aggregates:
-        subnets = sorted(agg.get_subnets(sorted_networks), key=lambda s: s.cidr)
+        subnets = sorted(agg.get_subnets(sorted_networks), key=lambda s: (s.cidr.version, s.cidr))
         aggregate_subnets[agg.name] = subnets
         for s in subnets:
             all_child_subnet_names.add(s.name)

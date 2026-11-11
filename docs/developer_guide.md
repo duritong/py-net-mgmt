@@ -54,6 +54,11 @@ When extending network inspection or lookup routines:
 3. **Jinja2 Filters**: Synchronize filters inside `src/net_mgmt/jinja.py` (e.g. `lookup_target`, `network_containing_ip`, `network_containing_cidr`, `ip_info`, `cidr_info`) so automation templates have 1:1 parity with CLI capabilities.
 4. **Programmatic API**: Export top-level helpers in `src/net_mgmt/__init__.py` and `src/net_mgmt/db.py`.
 5. **Unit Tests**: Ensure tests cover single IPs, subnets, supernets, multiple contexts, and error conditions.
+
+### IPv6 & Dual-Stack Development Mandates
+1. **Never Expand Full Subnets**: In IPv6, subnets can have $2^{64}$ addresses. Never use `for ip in net:` or `set(net)` on arbitrary subnet allocations or reservations. Always use containment checks (`ip in net`) or mathematical boundary offsets.
+2. **Version-Safe Comparisons**: In Python's `ipaddress`, cross-version comparisons (e.g. `ipv4 < ipv6` or `ipv4.subnet_of(ipv6)`) raise `TypeError`. Always guard with `version == other.version` or include `version` in sort keys: `(net.version, net.network_address)`.
+3. **Symmetrical Dual-Stack**: Maintain the `1 Network = 1 Prefix` model, linked through shared Relational coordinates (`epg`, `vlan`, `bridge_domain`).
 ---
 
 ## 3. Code Quality & Formatting

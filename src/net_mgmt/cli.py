@@ -57,6 +57,12 @@ def validate(path, format):
     help="Output format (table, csv, json)",
 )
 @click.option("--sort-by", "--sort", default=None, help="Comma-separated list of fields to sort the output by")
+@click.option(
+    "--ip-version",
+    type=click.Choice(["4", "6", "v4", "v6"]),
+    default=None,
+    help="Filter networks by IP version (4 or 6)",
+)
 def list(
     level,
     path,
@@ -73,6 +79,7 @@ def list(
     no_wrap,
     format,
     sort_by,
+    ip_version,
 ):
     """List available networks or hierarchical level entities with coordinate filtering"""
     alias_map = {
@@ -139,7 +146,7 @@ def list(
 
                 try:
                     net = ipaddress.ip_network(str(val), strict=False)
-                    return (0, net.network_address, net.prefixlen)
+                    return (0, net.version, int(net.network_address), net.prefixlen)
                 except Exception:
                     pass
             elif f in ["vlan", "default_mtu", "mtu"]:
@@ -265,6 +272,7 @@ def list(
         "epg": epg,
         "bridge_domain": bridge_domain,
         "context": context,
+        "ip_version": ip_version,
     }
     networks = core_query_networks(networks, filters=filters)
 
@@ -971,11 +979,12 @@ def show(level, name, format, path, context=None):
         # Sort allocations
         def sort_key(a):
             if a.ip:
-                return a.ip
+                return (0, a.ip.version, int(a.ip))
             try:
-                return ipaddress.ip_network(a.cidr.split("-")[0].strip(), strict=False).network_address
+                addr = ipaddress.ip_network(a.cidr.split("-")[0].strip(), strict=False).network_address
+                return (1, addr.version, int(addr))
             except ValueError:
-                return ipaddress.ip_address("0.0.0.0")
+                return (2, 0, str(a.cidr))
 
         sorted_allocations = sorted(network.allocations, key=sort_key)
         for alloc in sorted_allocations:

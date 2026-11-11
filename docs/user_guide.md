@@ -56,6 +56,7 @@ Lists all networks or entities at a given hierarchical level (`networks`, `bridg
 #### Options
 * `--no-wrap`: Disables column text wrapping and truncation, forcing each entity row to output as a single, fully expanded line (perfect for piping/scripting or displaying long names). Note: This no-wrap behavior is automatically enabled when output is piped or redirected (not a TTY) to make command-line manipulation (such as grep) seamless.
 * `--format`, `-f`: Output format filter (`table`, `csv`, or `json`). Defaults to `table`.
+* `--ip-version`: Filter networks by IP version (`4`, `6`, `v4`, or `v6`).
 * `--sort-by`, `--sort`: Comma-separated list of fields to sort the output by (e.g. `networks --sort-by datacenter,zone,vlan`). If omitted, output is sorted by default hierarchical cascades.
 
 ```bash
@@ -76,6 +77,12 @@ net-mgmt list networks --format json
 
 # List networks formatted as CSV
 net-mgmt list networks -f csv
+
+# List only IPv6 networks
+net-mgmt list networks --ip-version 6
+
+# List only IPv4 networks
+net-mgmt list networks --ip-version 4
 ```
 
 ---
@@ -380,6 +387,17 @@ parent_net = get_network_for_cidr("10.100.1.16/28")
 cidr_info = network.get_cidr_info("10.100.1.16/28")
 print(cidr_info["num_addresses"])  # 16
 ```
+
+### Dual-Stack Network Helpers
+```python
+# Check IP version (4 or 6)
+print(network.ip_version)  # 4 or 6
+
+# Resolve corresponding dual-stack peer network (IPv4 <-> IPv6) under the same EPG / Bridge Domain
+peer_v6 = network.get_dual_stack_peer(all_networks)
+if peer_v6:
+    print(f"Dual-stack peer: {peer_v6.name} ({peer_v6.cidr})")
+```
 ---
 
 ## 3. Jinja2 Filters Integration
@@ -499,6 +517,27 @@ IP Status: {{ ip_status.status }}
 
 {% set subnet_stats = network | cidr_info('10.100.1.16/28') %}
 Subnet Addresses: {{ subnet_stats.num_addresses }}
+```
+
+#### Filter: `dual_stack_peer`
+Retrieves the corresponding dual-stack peer network (IPv4 <-> IPv6) sharing the same EPG or Bridge Domain:
+```jinja
+{# Retrieve the IPv6 peer network from an IPv4 network #}
+{% set v6_peer = network | dual_stack_peer %}
+{% if v6_peer %}
+IPv6 Prefix: {{ v6_peer.cidr }}
+IPv6 Gateway: {{ v6_peer.gateway }}
+{% endif %}
+```
+
+#### Filter: `networks_by_ip_version`
+Filters a list of networks by IP version (`4` or `6`):
+```jinja
+{# Filter out all IPv6 networks from global inventory #}
+{% set v6_networks = get_networks() | networks_by_ip_version(6) %}
+{% for net in v6_networks %}
+- {{ net.name }}: {{ net.cidr }}
+{% endfor %}
 ```
 
 #### Relational Metadata Lookups: `*_by_name`

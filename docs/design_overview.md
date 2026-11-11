@@ -182,3 +182,23 @@ For an IP address, the lookup engine computes its exact operational state:
 2. **`Available`**: When the IP resides inside an allocatable reservation (`allocatable: true`) and is not currently allocated.
 3. **`Reserved`**: When the IP resides inside a non-allocatable reservation (`allocatable: false`), including system reservations (`sys-gateway`, `sys-network`, `sys-broadcast`, `sys-internal`).
 4. **`Unreserved`**: When the IP resides in unreserved network address space.
+
+---
+
+## 7. IPv6 & Dual-Stack Architecture
+
+`net-mgmt` supports IPv6 natively and symmetrically alongside IPv4:
+
+### 7.1. Symmetrical Relational Dual-Stack
+* **Prefix Segregation**: Each network represents a single L3 CIDR prefix (either IPv4 or IPv6), matching NetBox data export standards and maintaining 100% backward compatibility.
+* **L2 Coordinate Association**: In Relational Mode, an EPG, VLAN, or Bridge Domain can link both an IPv4 network and an IPv6 network simultaneously.
+* **Peer Resolution**: Networks provide native peer resolution (`network.get_dual_stack_peer(all_networks)` and `| dual_stack_peer` template filter) to look up the corresponding IPv4 or IPv6 sibling under the same logical tier.
+
+### 7.2. Address Family Segregation & Scale
+* **Protocol-Segregated Validation**: Overlap detection evaluates IPv4 and IPv6 independently, preventing cross-family comparison errors while strictly enforcing routing constraints within each family.
+* **High-Scale Collision Checking**: Allocation collision detection uses $O(1)$ set lookups for host allocations and interval containment for delegated subnets, avoiding full-subnet address expansions on large IPv6 prefixes (e.g. `/64` or `/80`).
+* **RFC-Compliant System Reservations**:
+  - **Subnet-Router Anycast**: Always reserves `cidr.network_address` (`sys-network`) for IPv6.
+  - **No Broadcast**: Skips broadcast reservation for IPv6 (per RFC 4291).
+  - **Gateway Protection**: When `reserve_gateway: true`, reserves `first_ip + 1` (`sys-gateway`) across both families.
+  - **Internal Allocation Blocks**: When `reserve_internal: true`, reserves `first_ip + 2` to `first_ip + reserve_internal_until`.

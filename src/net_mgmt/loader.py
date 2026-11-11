@@ -316,17 +316,19 @@ def get_item_start_ip(item):
     val = item.get("cidr") or item.get("ip")
     if not val:
         comment_val = str(item.get("comment", ""))
-        return (ipaddress.ip_address("255.255.255.255"), comment_val, str(item.get("id", "")))
+        return (9, 0, 0, comment_val, str(item.get("id", "")))
     val_str = str(val).split("-")[0].strip()
     full_val = str(val)
     item_id = str(item.get("id", ""))
     try:
-        return (ipaddress.ip_address(val_str), full_val, item_id)
+        addr = ipaddress.ip_address(val_str)
+        return (0, addr.version, int(addr), full_val, item_id)
     except ValueError:
         try:
-            return (ipaddress.ip_network(val_str, strict=False).network_address, full_val, item_id)
+            addr = ipaddress.ip_network(val_str, strict=False).network_address
+            return (0, addr.version, int(addr), full_val, item_id)
         except ValueError:
-            return (ipaddress.ip_address("255.255.255.255"), full_val, item_id)
+            return (9, 0, 0, full_val, item_id)
 
 
 def format_yaml_node(node):
@@ -608,13 +610,18 @@ def save_network_to_file(network: Network):
 
                 def sort_key(a):
                     if a.ip:
-                        return a.ip
+                        return (0, a.ip.version, int(a.ip))
                     elif a.cidr:
                         try:
-                            return ipaddress.ip_network(a.cidr.split("-")[0].strip(), strict=False).network_address
+                            net = ipaddress.ip_network(a.cidr.split("-")[0].strip(), strict=False)
+                            return (1, net.version, int(net.network_address))
                         except ValueError:
-                            return ipaddress.ip_address(a.cidr.split("-")[0].strip())
-                    return ipaddress.ip_address("0.0.0.0")
+                            try:
+                                addr = ipaddress.ip_address(a.cidr.split("-")[0].strip())
+                                return (1, addr.version, int(addr))
+                            except ValueError:
+                                pass
+                    return (2, 0, 0)
 
                 sorted_allocs = sorted(network.allocations, key=sort_key)
                 alloc_list = CommentedSeq()

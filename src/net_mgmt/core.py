@@ -256,51 +256,81 @@ class Network:
                     )
                 )
 
-        if isinstance(self.cidr, ipaddress.IPv4Network):
-            # Logic primarily for IPv4, IPv6 is more complex with gateways/internal
-            # Assuming IPv4 for the specific +1 +4 logic as is common
-            first_ip = self.cidr.network_address
+        first_ip = self.cidr.network_address
 
-            if self.reserve_gateway:
-                gw_ip = first_ip + 1
-                if gw_ip in self.cidr:
-                    sys_res.append(
-                        Reservation(
-                            id="sys-gateway",
-                            cidr=str(gw_ip),
-                            comment="network internal",
-                            allocatable=False,
-                        )
+        if self.reserve_gateway:
+            gw_ip = first_ip + 1
+            if gw_ip in self.cidr:
+                sys_res.append(
+                    Reservation(
+                        id="sys-gateway",
+                        cidr=str(gw_ip),
+                        comment="network internal",
+                        allocatable=False,
                     )
+                )
 
-            if self.reserve_internal:
-                start_int = first_ip + 2
-                end_int = first_ip + self.reserve_internal_until
-                if start_int in self.cidr and end_int in self.cidr:
+        if self.reserve_internal:
+            start_int = first_ip + 2
+            end_int = first_ip + self.reserve_internal_until
+            if start_int in self.cidr and end_int in self.cidr:
+                sys_res.append(
+                    Reservation(
+                        id="sys-internal",
+                        cidr=f"{start_int}-{end_int}",
+                        comment="network internal",
+                        allocatable=False,
+                    )
+                )
+            elif start_int in self.cidr:
+                # Partial overlap with end of subnet
+                offset = 2 if isinstance(self.cidr, ipaddress.IPv4Network) else 1
+                last_host = self.cidr.network_address + self.cidr.num_addresses - offset
+                effective_end = min(end_int, last_host)
+                if start_int <= effective_end:
                     sys_res.append(
                         Reservation(
                             id="sys-internal",
-                            cidr=f"{start_int}-{end_int}",
+                            cidr=f"{start_int}-{effective_end}",
                             comment="network internal",
                             allocatable=False,
                         )
                     )
-                elif start_int in self.cidr:
-                    # Partial overlap with end of subnet
-                    hosts = list(self.cidr.hosts())
-                    if hosts:
-                        last_host = hosts[-1]
-                        effective_end = min(end_int, last_host)
-                        if start_int <= effective_end:
-                            sys_res.append(
-                                Reservation(
-                                    id="sys-internal",
-                                    cidr=f"{start_int}-{effective_end}",
-                                    comment="network internal",
-                                    allocatable=False,
-                                )
-                            )
         return sys_res
+
+    @property
+    def ip_version(self) -> int:
+        """Return the IP version of this network (4 or 6)."""
+        return self.cidr.version
+
+    def get_dual_stack_peer(self, all_networks: List["Network"]) -> Optional["Network"]:
+        """
+        Find the corresponding dual-stack peer network (IPv4 <-> IPv6) matching
+        the same EPG or Bridge Domain and context.
+        """
+        target_version = 6 if self.cidr.version == 4 else 4
+        if self.epg:
+            for net in all_networks:
+                if (
+                    net != self
+                    and net.cidr.version == target_version
+                    and net.context == self.context
+                    and net.epg == self.epg
+                ):
+                    return net
+
+        if self.bridge_domain:
+            for net in all_networks:
+                if (
+                    net != self
+                    and net.cidr.version == target_version
+                    and net.context == self.context
+                    and net.bridge_domain == self.bridge_domain
+                    and net.vlan == self.vlan
+                ):
+                    return net
+
+        return None
 
     @property
     def gateway(self) -> Optional[str]:
@@ -703,7 +733,9 @@ class Network:
         self.validate()
         self.save()
 
-    def get_next_free_ip(self, reservation_id: Optional[str] = None) -> ipaddress.IPv4Address:
+    def get_next_free_ip(
+        self, reservation_id: Optional[str] = None
+    ) -> Union[ipaddress.IPv4Address, ipaddress.IPv6Address]:
         eff_reservations = self.effective_reservations
 
         if reservation_id:
@@ -719,15 +751,20 @@ class Network:
             if not target_reservations:
                 raise ValueError("No allocatable reservations found")
 
-        allocated_ips = set()
-        for alloc in self.allocations:
-            for net in alloc.networks:
-                for ip in net:
-                    allocated_ips.add(ip)
+        single_allocated_ips = {alloc.ip for alloc in self.allocations if alloc.ip}
+        subnet_alloc_nets = [net for alloc in self.allocations if alloc.cidr for net in alloc.networks]
+
+        def is_allocated(candidate_ip):
+            if candidate_ip in single_allocated_ips:
+                return True
+            for net in subnet_alloc_nets:
+                if candidate_ip in net:
+                    return True
+            return False
 
         for res in target_reservations:
             for ip in res.iter_ips():
-                if ip not in allocated_ips:
+                if not is_allocated(ip):
                     # Skip if the IP falls within any non-allocatable reservation
                     is_reserved = any(not r.allocatable and r.contains_ip(ip) for r in eff_reservations)
                     if not is_reserved:
@@ -793,71 +830,91 @@ class Network:
         else:
             target_reservations = [r for r in eff_reservations if r.allocatable]
 
-        allocated_ips = set()
-        for alloc in self.allocations:
-            for net in alloc.networks:
-                for ip in net:
-                    allocated_ips.add(ip)
+        single_allocated_ips = {alloc.ip for alloc in self.allocations if alloc.ip}
+        subnet_alloc_nets = [net for alloc in self.allocations if alloc.cidr for net in alloc.networks]
 
-        free_ips_set = set()
-        for res in target_reservations:
-            for ip in res.iter_ips():
-                if ip not in allocated_ips:
-                    is_reserved = any(not r.allocatable and r.contains_ip(ip) for r in eff_reservations)
-                    if not is_reserved:
-                        free_ips_set.add(ip)
-        if len(free_ips_set) < needed:
-            raise ValueError(
-                f"Not enough free IPs. Requested {count}, missing {needed}, "
-                f"but only {len(free_ips_set)} available in reservations."
-            )
+        def is_ip_free(ip):
+            if ip in single_allocated_ips:
+                return False
+            for net in subnet_alloc_nets:
+                if ip in net:
+                    return False
+            if any(not r.allocatable and r.contains_ip(ip) for r in eff_reservations):
+                return False
+            return True
 
         existing_ips = []
         for a in existing:
-            for net in a.networks:
-                for ip in net:
-                    existing_ips.append(ip)
+            if a.ip:
+                existing_ips.append(a.ip)
+            elif a.cidr:
+                for net in a.networks:
+                    if net.num_addresses <= 256:
+                        for ip in net:
+                            existing_ips.append(ip)
+                    else:
+                        existing_ips.append(net.network_address)
+                        existing_ips.append(net.broadcast_address)
 
         existing_ips.sort()
         allocated_new_ips = []
 
         if existing_ips:
             next_ip = existing_ips[-1] + 1
-            while needed > 0 and next_ip in free_ips_set:
+            while needed > 0 and is_ip_free(next_ip) and any(r.contains_ip(next_ip) for r in target_reservations):
                 allocated_new_ips.append(next_ip)
-                free_ips_set.remove(next_ip)
                 needed -= 1
                 next_ip += 1
 
         if needed > 0:
-            remaining_free = sorted(list(free_ips_set))
+            # Search target reservations for a contiguous block of size `needed`
             current_block = []
             best_block = []
-            for ip in remaining_free:
-                if not current_block:
-                    current_block = [ip]
-                elif int(ip) == int(current_block[-1]) + 1:
-                    current_block.append(ip)
-                else:
-                    if len(current_block) >= needed:
-                        best_block = current_block[:needed]
-                        break
-                    current_block = [ip]
+            for res in target_reservations:
+                for ip in res.iter_ips():
+                    if ip in allocated_new_ips:
+                        current_block = []
+                        continue
+                    if is_ip_free(ip):
+                        if not current_block or int(ip) == int(current_block[-1]) + 1:
+                            current_block.append(ip)
+                        else:
+                            if len(current_block) > len(best_block):
+                                best_block = current_block
+                            current_block = [ip]
+                        if len(current_block) == needed:
+                            best_block = current_block
+                            break
+                    else:
+                        if len(current_block) > len(best_block):
+                            best_block = current_block
+                        current_block = []
+                if len(best_block) >= needed:
+                    break
 
-            if len(current_block) >= needed:
-                best_block = current_block[:needed]
-
-            if best_block:
+            if len(best_block) >= needed:
+                allocated_new_ips.extend(best_block[:needed])
+                needed = 0
+            elif best_block:
                 allocated_new_ips.extend(best_block)
-                for ip in best_block:
-                    free_ips_set.remove(ip)
                 needed -= len(best_block)
 
         if needed > 0:
-            remaining_free = sorted(list(free_ips_set))
-            allocated_new_ips.extend(remaining_free[:needed])
-            needed = 0
+            # Collect remaining free IPs across reservations
+            for res in target_reservations:
+                for ip in res.iter_ips():
+                    if ip not in allocated_new_ips and is_ip_free(ip):
+                        allocated_new_ips.append(ip)
+                        needed -= 1
+                        if needed == 0:
+                            break
+                if needed == 0:
+                    break
 
+        if needed > 0:
+            raise ValueError(
+                f"Not enough free IPs. Requested {count}, could only allocate {len(allocated_new_ips)} in reservations."
+            )
         if allocated_new_ips:
             allocated_new_ips.sort()
             ranges = []
@@ -922,7 +979,11 @@ class Network:
         return [
             n
             for n in all_networks
-            if n != self and n.cidr != self.cidr and n.cidr.subnet_of(self.cidr) and n.context == self.context
+            if n != self
+            and n.cidr.version == self.cidr.version
+            and n.cidr != self.cidr
+            and n.cidr.subnet_of(self.cidr)
+            and n.context == self.context
         ]
 
     def get_parent_aggregate(self, all_networks: List["Network"]) -> Optional["Network"]:
@@ -932,6 +993,7 @@ class Network:
             for n in all_networks
             if n != self
             and n.aggregate
+            and n.cidr.version == self.cidr.version
             and n.cidr != self.cidr
             and self.cidr.subnet_of(n.cidr)
             and n.context == self.context
@@ -949,7 +1011,7 @@ class Network:
             return []
         children = self.get_subnets(all_networks)
         free_blocks = [self.cidr]
-        for child in sorted(children, key=lambda c: c.cidr.prefixlen):
+        for child in sorted(children, key=lambda c: (c.cidr.version, c.cidr.prefixlen)):
             new_free = []
             for block in free_blocks:
                 if child.cidr.subnet_of(block):
@@ -960,7 +1022,7 @@ class Network:
                 else:
                     new_free.append(block)
             free_blocks = new_free
-        return sorted(free_blocks, key=lambda x: x.network_address)
+        return sorted(free_blocks, key=lambda x: (x.version, x.network_address))
 
     @property
     def to_dict(self) -> dict:
@@ -1030,8 +1092,11 @@ class Network:
                 if "/" in offset_cidr:
                     offset_ip, prefix_len = offset_cidr.split("/")
                 else:
-                    offset_ip, prefix_len = offset_cidr, "32"
-                offset_int = int(ipaddress.ip_address(offset_ip))
+                    offset_ip, prefix_len = offset_cidr, str(self.cidr.max_prefixlen)
+                try:
+                    offset_int = int(offset_ip)
+                except ValueError:
+                    offset_int = int(ipaddress.ip_address(offset_ip))
             except Exception as e:
                 failed[res_id] = f"Invalid cidr_offset '{offset_cidr}': {e}"
                 continue
@@ -1088,45 +1153,47 @@ def validate_network_list(networks: List[Network]):
     errors = []
 
     def check_overlaps(nets: List[Network], group_name: str):
-        sorted_networks = sorted(nets, key=lambda x: x.cidr)
-        for i in range(len(sorted_networks)):
-            for j in range(i + 1, len(sorted_networks)):
-                net1 = sorted_networks[i]
-                net2 = sorted_networks[j]
-                if net1.cidr.overlaps(net2.cidr):
-                    # Check aggregate containment: child subnets must be strict subnets of the aggregate
-                    is_child_of_1 = (
-                        net1.aggregate
-                        and not net2.aggregate
-                        and net2.cidr != net1.cidr
-                        and net2.cidr.subnet_of(net1.cidr)
-                    )
-                    if is_child_of_1:
-                        continue
-
-                    is_child_of_2 = (
-                        net2.aggregate
-                        and not net1.aggregate
-                        and net1.cidr != net2.cidr
-                        and net1.cidr.subnet_of(net2.cidr)
-                    )
-                    if is_child_of_2:
-                        continue
-
-                    if net1.aggregate and net2.aggregate:
-                        # Allow nested aggregates if one is a strict subnet of another
-                        nested = net1.cidr != net2.cidr and (
-                            net1.cidr.subnet_of(net2.cidr) or net2.cidr.subnet_of(net1.cidr)
+        for version in (4, 6):
+            version_nets = [n for n in nets if n.cidr.version == version]
+            sorted_networks = sorted(version_nets, key=lambda x: x.cidr)
+            for i in range(len(sorted_networks)):
+                for j in range(i + 1, len(sorted_networks)):
+                    net1 = sorted_networks[i]
+                    net2 = sorted_networks[j]
+                    if net1.cidr.overlaps(net2.cidr):
+                        # Check aggregate containment: child subnets must be strict subnets of the aggregate
+                        is_child_of_1 = (
+                            net1.aggregate
+                            and not net2.aggregate
+                            and net2.cidr != net1.cidr
+                            and net2.cidr.subnet_of(net1.cidr)
                         )
-                        if nested:
+                        if is_child_of_1:
                             continue
-                    errors.append(
-                        f"Network '{net1.name}' ({net1.cidr}, "
-                        f"EPG: '{net1.epg or 'None'}', BD: '{net1.bridge_domain or 'None'}') "
-                        f"overlaps with '{net2.name}' ({net2.cidr}, "
-                        f"EPG: '{net2.epg or 'None'}', BD: '{net2.bridge_domain or 'None'}') "
-                        f"in {group_name}"
-                    )
+
+                        is_child_of_2 = (
+                            net2.aggregate
+                            and not net1.aggregate
+                            and net1.cidr != net2.cidr
+                            and net1.cidr.subnet_of(net2.cidr)
+                        )
+                        if is_child_of_2:
+                            continue
+
+                        if net1.aggregate and net2.aggregate:
+                            # Allow nested aggregates if one is a strict subnet of another
+                            nested = net1.cidr != net2.cidr and (
+                                net1.cidr.subnet_of(net2.cidr) or net2.cidr.subnet_of(net1.cidr)
+                            )
+                            if nested:
+                                continue
+                        errors.append(
+                            f"Network '{net1.name}' ({net1.cidr}, "
+                            f"EPG: '{net1.epg or 'None'}', BD: '{net1.bridge_domain or 'None'}') "
+                            f"overlaps with '{net2.name}' ({net2.cidr}, "
+                            f"EPG: '{net2.epg or 'None'}', BD: '{net2.bridge_domain or 'None'}') "
+                            f"in {group_name}"
+                        )
 
     # Check for overlapping CIDRs between routable networks (they effectively share a global context)
     routable_networks = [n for n in networks if n.routable]
@@ -1220,6 +1287,14 @@ def query_networks(networks: List[Network], filters: Optional[dict] = None, **kw
                 except ValueError:
                     match = False
                     break
+            elif key in ("ip_version", "version"):
+                try:
+                    if int(str(val).lstrip("v")) != net.cidr.version:
+                        match = False
+                        break
+                except (ValueError, TypeError):
+                    match = False
+                    break
             else:
                 # Standard attributes do exact case-insensitive matching (or direct matches)
                 attr_val = getattr(net, key, None)
@@ -1281,7 +1356,11 @@ def find_networks_for_cidr(
         target_net = cidr
 
     candidate_nets = [n for n in networks if context is None or n.context == context]
-    matching = [n for n in candidate_nets if target_net.subnet_of(n.cidr) or target_net == n.cidr]
+    matching = [
+        n
+        for n in candidate_nets
+        if n.cidr.version == target_net.version and (target_net.subnet_of(n.cidr) or target_net == n.cidr)
+    ]
     matching.sort(key=lambda n: n.name)
     matching.sort(
         key=lambda n: (
@@ -1381,7 +1460,11 @@ def lookup_ip_or_cidr(
 
     # is_cidr
     candidate_nets = [n for n in networks if context is None or n.context == context]
-    containing_nets = [n for n in candidate_nets if parsed_net.subnet_of(n.cidr) or parsed_net == n.cidr]
+    containing_nets = [
+        n
+        for n in candidate_nets
+        if n.cidr.version == parsed_net.version and (parsed_net.subnet_of(n.cidr) or parsed_net == n.cidr)
+    ]
     containing_nets.sort(key=lambda n: n.name)
     containing_nets.sort(
         key=lambda n: (
@@ -1403,7 +1486,7 @@ def lookup_ip_or_cidr(
                 info["parent_aggregate"] = f"{parent.name} ({parent.cidr})" if parent else None
                 if net.aggregate:
                     subnets = net.get_subnets(networks)
-                    info["subnets"] = [s.to_dict for s in sorted(subnets, key=lambda s: s.cidr)]
+                    info["subnets"] = [s.to_dict for s in sorted(subnets, key=lambda s: (s.cidr.version, s.cidr))]
                     info["unallocated_subnets"] = [str(b) for b in net.get_unallocated_subnets(networks)]
                 matches.append(info)
 
@@ -1415,9 +1498,9 @@ def lookup_ip_or_cidr(
         }
 
     # Check if target CIDR is a supernet containing networks
-    contained = [n for n in candidate_nets if n.cidr.subnet_of(parsed_net)]
+    contained = [n for n in candidate_nets if n.cidr.version == parsed_net.version and n.cidr.subnet_of(parsed_net)]
     if contained:
-        contained_sorted = sorted(contained, key=lambda n: (n.context, n.cidr))
+        contained_sorted = sorted(contained, key=lambda n: (n.context, n.cidr.version, n.cidr))
         return {
             "target": str(parsed_net),
             "target_type": "cidr",
