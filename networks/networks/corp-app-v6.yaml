@@ -1,0 +1,13 @@
+cidr: 2001:db8:10:30::/64
+description: Corporate Application Tier (IPv6)
+epg: EPG_App
+reservations:
+  - id: app-cluster
+    cidr: 2001:db8:10:30::100-2001:db8:10:30::200
+    comment: App Server Cluster
+    allocatable: true
+allocations:
+  - ip: 2001:db8:10:30::101
+    hostname: app-01.corp.local
+  - ip: 2001:db8:10:30::102
+    hostname: app-02.corp.local

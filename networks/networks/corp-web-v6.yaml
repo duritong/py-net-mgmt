@@ -1,0 +1,16 @@
+cidr: 2001:db8:10:10::/64
+description: Corporate Web Tier (IPv6)
+epg: EPG_Web
+reservations:
+  - id: web-vip
+    cidr: 2001:db8:10:10::10/128
+    comment: Web Cluster VIP
+  - id: dhcp6-pool
+    cidr: 2001:db8:10:10::1000-2001:db8:10:10::1fff
+    comment: DHCPv6 Dynamic Pool
+    allocatable: true
+allocations:
+  - ip: 2001:db8:10:10::1001
+    hostname: web-01.corp.local
+  - ip: 2001:db8:10:10::1002
+    hostname: web-02.corp.local

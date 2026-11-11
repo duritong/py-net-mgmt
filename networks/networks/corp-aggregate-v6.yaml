@@ -1,0 +1,6 @@
+cidr: 2001:db8:10::/48
+aggregate: true
+description: Corporate Service IPv6 Aggregate Network (/48 block)
+datacenter: DC_Frankfurt
+zone: Trusted
+routable: true

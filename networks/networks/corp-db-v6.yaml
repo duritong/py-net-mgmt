@@ -1,0 +1,14 @@
+cidr: 2001:db8:10:40::/64
+description: Corporate Database Tier (IPv6)
+epg: EPG_DB
+reservations:
+  - id: db-vip
+    cidr: 2001:db8:10:40::10/128
+    comment: Database VIP
+  - id: db-pool
+    cidr: 2001:db8:10:40::100-2001:db8:10:40::150
+    comment: Database Servers Pool
+    allocatable: true
+allocations:
+  - ip: 2001:db8:10:40::101
+    hostname: db-primary.corp.local
